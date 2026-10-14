@@ -1,8 +1,8 @@
-# Ora — real multi-user MVP
+# stup — real multi-user MVP
 
-This is a small, low-cost step toward turning the original `ora_v2.html` prototype into a real website. It preserves the Ora gradient/purple visual style and adds Supabase-backed authentication, persistent profiles, a 1–10 rating for every subject, subject-based discovery, direct conversations, and realtime message updates.
+This is a small, low-cost step toward turning the original `stup_v2.html` prototype into a real website. It preserves the stup gradient/purple visual style and adds Supabase-backed authentication, persistent profiles, a 1–10 rating for every subject, subject-based discovery, direct conversations, and realtime message updates.
 
-`ora_v2_original.html` is your uploaded original, kept unchanged for reference. This MVP still does not include Pass credits, session bookings, AI moderation, or student-ID verification. Subject ratings are included and are self-reported.
+`stup_v2_original.html` is your uploaded original, kept unchanged for reference. This MVP still does not include Pass credits, session bookings, AI moderation, or student-ID verification. Subject ratings are included and are self-reported.
 
 ## 1. Requirements
 - Node.js 20.19+ or 22.12+
@@ -14,7 +14,7 @@ This is a small, low-cost step toward turning the original `ora_v2.html` prototy
 3. Paste and run all of `supabase/schema.sql`.
 4. In **Project Settings → API** (or Connect), copy the Project URL and the publishable/anon client key. Never use the `service_role` secret in a browser app.
 
-If you already created the database from the earlier Ora MVP, run only `supabase/migration_subject_ratings.sql` in SQL Editor. Do not rerun the full schema on an existing database, because its policies already exist.
+If you already created the database from the earlier stup MVP, run only `supabase/migration_subject_ratings.sql` in SQL Editor. Do not rerun the full schema on an existing database, because its policies already exist.
 
 ## 3. Configure and run locally
 ```bash
@@ -55,19 +55,19 @@ For local testing, in **Authentication → URL Configuration**, add your local V
 - `src/style.css` — visual style and layout for the subject scales/cards.
 - `supabase/schema.sql` — database structure for a fresh project.
 - `supabase/migration_subject_ratings.sql` — adds subject ratings to a database made from the earlier MVP.
-- `ora_v2_original.html` — untouched original prototype for reference; the running Vite app uses `src/main.js` and `src/style.css`.
+- `stup_v2_original.html` — untouched original prototype for reference; the running Vite app uses `src/main.js` and `src/style.css`.
 
 ## Current feature scope
 - Email/password sign-up and login via Supabase Auth
-- Profile storage and editing in PostgreSQL
+- Profile ststupge and editing in PostgreSQL
 - Rate every subject from 1–10 (or leave it unselected)
 - Discover profiles in the same county and filter by subject/minimum rating
 - Start or reopen a direct conversation
 - Persistent messages with Realtime updates
-- Responsive UI based on Ora's existing purple/gradient style
+- Responsive UI based on stup's existing purple/gradient style
 
 ## Troubleshooting
 - `Invalid API key`: ensure the publishable/anon key, not service-role key, is in `.env`.
 - Profile insert/query errors: confirm `supabase/schema.sql` ran successfully.
-- Confirmation email: check Supabase Auth email settings and spam folder. For development, you can temporarily disable confirmation in Supabase Auth settings, but re-enable it before launch.
+- Confirmation email: check Supabase Auth email settings and spam folder. For development, you can tempstuprily disable confirmation in Supabase Auth settings, but re-enable it before launch.
 - Realtime does not update: verify `messages` is enabled in the `supabase_realtime` publication.

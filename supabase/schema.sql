@@ -1,4 +1,4 @@
--- Ora MVP schema. Run in Supabase SQL Editor.
+-- stup MVP schema. Run in Supabase SQL Editor.
 -- This MVP deliberately does NOT collect CNPs, phone numbers, or ID photos.
 create extension if not exists pgcrypto;
 
@@ -12,7 +12,7 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
--- Safe to re-run on an existing Ora database: adds the multi-subject rating field.
+-- Safe to re-run on an existing stup database: adds the multi-subject rating field.
 alter table public.profiles add column if not exists subject_ratings jsonb not null default '{}'::jsonb;
 
 create table if not exists public.conversations (
