@@ -59,7 +59,7 @@ For local testing, in **Authentication → URL Configuration**, add your local V
 
 ## Current feature scope
 - Email/password sign-up and login via Supabase Auth
-- Profile ststupge and editing in PostgreSQL
+- Profile storage and editing in PostgreSQL
 - Rate every subject from 1–10 (or leave it unselected)
 - Discover profiles in the same county and filter by subject/minimum rating
 - Start or reopen a direct conversation
@@ -69,5 +69,5 @@ For local testing, in **Authentication → URL Configuration**, add your local V
 ## Troubleshooting
 - `Invalid API key`: ensure the publishable/anon key, not service-role key, is in `.env`.
 - Profile insert/query errors: confirm `supabase/schema.sql` ran successfully.
-- Confirmation email: check Supabase Auth email settings and spam folder. For development, you can tempstuprily disable confirmation in Supabase Auth settings, but re-enable it before launch.
+- Confirmation email: check Supabase Auth email settings and spam folder. For development, you can temporarily disable confirmation in Supabase Auth settings, but re-enable it before launch.
 - Realtime does not update: verify `messages` is enabled in the `supabase_realtime` publication.
