@@ -30,4 +30,4 @@
 .profile-photo-setting{display:grid;justify-items:start;gap:8px}
 .profile-photo-setting .avatar{width:76px;height:76px}
 .profile-photo-setting input{max-width:100%}
-@media(max-width:640px){.topinner .app-nav{order:3;width:100%;margin:0}.topinner .app-nav button{flex:1}.ora-search{align-items:stretch}.search-segment{width:100%}.search-segment button{flex:1}.ora-search input{flex:1 1 100%}.ora-search select{flex:1}.ora-search>[data-search-submit]{flex:1}}
+@media(max-width:640px){.topinner{min-height:112px;padding:12px 14px 10px;gap:10px}.topinner .app-nav{order:3;width:100%;margin:0;gap:6px}.topinner .app-nav button{flex:1;min-height:42px;padding:10px 8px}.ora-search{align-items:stretch}.search-segment{width:100%}.search-segment button{flex:1}.ora-search input{flex:1 1 100%}.ora-search select{flex:1}.ora-search>[data-search-submit]{flex:1}}

@@ -230,7 +230,7 @@ function shell(content) {
         <nav class="app-nav">
           <button class="${state.view === 'discover' ? 'active' : ''}" data-view="discover">Discover</button>
           <button class="${state.view === 'inbox' ? 'active' : ''}" data-view="inbox">Inbox</button>
-          <button class="${state.view === 'settings' ? 'active' : ''}" data-view="settings">Profile</button>
+          <button class="${state.view === 'settings' ? 'active' : ''}" data-view="settings">Settings</button>
         </nav>
         <span class="credit" title="Sessions are your available session balance">✦ ${sessionBalance()} Sessions</span>
       </div>

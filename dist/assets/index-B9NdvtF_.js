@@ -33,7 +33,7 @@ ${b}`}class x extends Error{constructor({message:e,code:t,cause:s,name:i}){var n
         <nav class="app-nav">
           <button class="${u.view==="discover"?"active":""}" data-view="discover">Discover</button>
           <button class="${u.view==="inbox"?"active":""}" data-view="inbox">Inbox</button>
-          <button class="${u.view==="settings"?"active":""}" data-view="settings">Profile</button>
+          <button class="${u.view==="settings"?"active":""}" data-view="settings">Settings</button>
         </nav>
         <span class="credit" title="Sessions are your available session balance">✦ ${Vt()} Sessions</span>
       </div>
