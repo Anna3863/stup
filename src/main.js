@@ -1516,7 +1516,42 @@ function authScreen(mode = 'signup') {
       state.view = 'discover';
       saveLocalState();
       render();
-      } catch (error) {
+    } catch (error) {
+      if (mode === 'signup' && error?.message === 'Failed to fetch') {
+        const display_name = String(form.get('display_name') || '').trim();
+        const school_level = Number(form.get('school_level') || 1);
+        const county = String(form.get('county') || 'București');
+        const studentPhoto = form.get('student_photo');
+        const existingUser = state.localUsers.find((person) => person.email === email);
+        if (existingUser) {
+          toast('This email already has a local demo account.');
+          return;
+        }
+        const localUser = {
+          id: `local-${Date.now()}`,
+          display_name,
+          school_level,
+          county,
+          main_subject: 'Mathematics',
+          subject_ratings: {},
+          bio: '',
+          lumen_balance: DEFAULT_SESSIONS,
+          verified: false,
+          student_id_photo_url: studentPhoto && studentPhoto.size ? await readDataUrl(studentPhoto) : '',
+          profile_photo_url: '',
+          password,
+          email,
+          sessions: 0
+        };
+        state.localUsers.push(localUser);
+        state.profile = { ...localUser };
+        state.people = state.localUsers.filter((person) => person.id !== localUser.id);
+        state.view = 'discover';
+        saveLocalState();
+        toast('Supabase is unavailable, so this demo account was created locally.');
+        render();
+        return;
+      }
       const message = error?.message === 'Failed to fetch'
         ? 'Could not reach Supabase. Check your internet connection and VITE_SUPABASE_URL.'
         : error.message || 'Something went wrong.';
