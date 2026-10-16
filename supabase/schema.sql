@@ -9,6 +9,7 @@ create table if not exists public.profiles (
   county text not null default 'București' check (char_length(county) between 2 and 50),
   main_subject text not null default 'Mathematics' check (char_length(main_subject) between 2 and 100),
   subject_ratings jsonb not null default '{}'::jsonb check (jsonb_typeof(subject_ratings) = 'object'),
+  lumen_balance integer not null default 3 check (lumen_balance >= 0),
   bio text not null default '',
   verified boolean not null default false,
   student_id_photo_url text,
@@ -22,6 +23,7 @@ alter table public.profiles add column if not exists bio text not null default '
 alter table public.profiles add column if not exists verified boolean not null default false;
 alter table public.profiles add column if not exists student_id_photo_url text;
 alter table public.profiles add column if not exists profile_photo_url text;
+alter table public.profiles add column if not exists lumen_balance integer not null default 3;
 
 create table if not exists public.profile_reviews (
   id uuid primary key default gen_random_uuid(),
@@ -52,6 +54,22 @@ create table if not exists public.messages (
   body text not null check (char_length(body) between 1 and 2000),
   created_at timestamptz not null default now()
 );
+create table if not exists public.reports (
+  id uuid primary key default gen_random_uuid(),
+  target_profile_id uuid not null references public.profiles(id) on delete cascade,
+  reporter_profile_id uuid not null references public.profiles(id) on delete cascade,
+  conversation_id text not null,
+  reason text not null check (char_length(reason) between 10 and 2000),
+  created_at timestamptz not null default now(),
+  check (target_profile_id <> reporter_profile_id)
+);
+create table if not exists public.favorite_profiles (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  favorite_profile_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, favorite_profile_id),
+  check (user_id <> favorite_profile_id)
+);
 create index if not exists messages_conversation_created_idx on public.messages(conversation_id, created_at);
 create index if not exists profiles_county_idx on public.profiles(county);
 
@@ -60,12 +78,16 @@ alter table public.profile_reviews enable row level security;
 alter table public.conversations enable row level security;
 alter table public.conversation_members enable row level security;
 alter table public.messages enable row level security;
+alter table public.reports enable row level security;
+alter table public.favorite_profiles enable row level security;
 
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert on public.profile_reviews to authenticated;
 grant select, insert on public.conversations to authenticated;
 grant select, insert on public.conversation_members to authenticated;
 grant select, insert on public.messages to authenticated;
+grant insert on public.reports to authenticated;
+grant select, insert, delete on public.favorite_profiles to authenticated;
 
 create policy "Signed-in users can discover basic profiles" on public.profiles for select to authenticated using (true);
 create policy "Users can create their own profile" on public.profiles for insert to authenticated with check (id = auth.uid());
@@ -74,6 +96,18 @@ create policy "Signed-in users can read profile reviews" on public.profile_revie
 create policy "Users can post reviews as themselves" on public.profile_reviews for insert to authenticated with check (
   reviewer_profile_id = auth.uid() and target_profile_id <> auth.uid()
 );
+create policy "Users can submit reports" on public.reports for insert to authenticated with check (
+  reporter_profile_id = auth.uid() and target_profile_id <> auth.uid()
+);
+create policy "Users can read their favorites" on public.favorite_profiles for select to authenticated using (user_id = auth.uid());
+create policy "Users can add their favorites" on public.favorite_profiles for insert to authenticated with check (user_id = auth.uid() and favorite_profile_id <> auth.uid());
+create policy "Users can remove their favorites" on public.favorite_profiles for delete to authenticated using (user_id = auth.uid());
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('student-ids', 'student-ids', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update set file_size_limit = excluded.file_size_limit;
+create policy "Users can upload their student ID" on storage.objects for insert to authenticated
+with check (bucket_id = 'student-ids' and (storage.foldername(name))[1] = 'student-ids');
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('profile-photos', 'profile-photos', true, 5242880, array['image/jpeg', 'image/png', 'image/webp'])

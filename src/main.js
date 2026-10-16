@@ -2,6 +2,7 @@
 import './style.css';
 import './profile-reviews.css';
 import './ora-search.css';
+import './features.css';
 
 const SUBJECTS = ['Romanian language and literature','Mathematics','Physics','Chemistry','Biology','History','Geography','Computer science','ICT','English','French','German','Spanish','Latin','Logic','Psychology','Philosophy','Economics','Social education','Art','Music','Physical education','Religion','Technology','Natural sciences','Entrepreneurship'];
 const LEVELS = ['Middle school','High school','University'];
@@ -15,6 +16,7 @@ const state = {
   reviews: [],
   reviewsLoadError: '',
   chats: [],
+  favorites: [],
   localUsers: [],
   view: 'discover',
   searchMode: 'subject',
@@ -27,6 +29,9 @@ const state = {
   minRating: 7,
   activeChatId: null
 };
+
+const DEFAULT_SESSIONS = 3;
+const BLOCKED_COMMENT_WORDS = /(?:idiot|stupid|hate you|prost|tâmpit|fuck|shit)/i;
 
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({
@@ -54,8 +59,12 @@ function readLocalState() {
     const parsed = JSON.parse(raw);
     state.localUsers = Array.isArray(parsed.localUsers) ? parsed.localUsers : [];
     state.reviews = Array.isArray(parsed.reviews) ? parsed.reviews : [];
-    state.chats = Array.isArray(parsed.chats) ? parsed.chats : [];
+    state.chats = Array.isArray(parsed.chats)
+      ? parsed.chats.map((chat) => ({ ...chat, status: chat.status === 'declined' ? 'declined' : 'active' }))
+      : [];
+    state.favorites = Array.isArray(parsed.favorites) ? parsed.favorites : [];
     state.profile = parsed.profile || null;
+    if (state.profile && state.profile.lumen_balance == null) state.profile.lumen_balance = DEFAULT_SESSIONS;
     state.view = parsed.view || 'discover';
     state.searchMode = parsed.searchMode || 'subject';
     state.searchSubmitted = Boolean(parsed.searchSubmitted);
@@ -73,6 +82,7 @@ function readLocalState() {
     state.localUsers = [];
     state.reviews = [];
     state.chats = [];
+    state.favorites = [];
     state.profile = null;
   }
 }
@@ -82,6 +92,7 @@ function saveLocalState() {
     localUsers: state.localUsers,
     reviews: state.reviews,
     chats: state.chats,
+    favorites: state.favorites,
     profile: state.profile,
     view: state.view,
     searchMode: state.searchMode,
@@ -135,6 +146,26 @@ function getPersonById(id) {
     || null;
 }
 
+function isFavorite(profileId) {
+  return state.favorites.includes(profileId);
+}
+
+async function toggleFavorite(profileId) {
+  const wasFavorite = isFavorite(profileId);
+  state.favorites = wasFavorite
+    ? state.favorites.filter((id) => id !== profileId)
+    : [...state.favorites, profileId];
+  saveLocalState();
+
+  if (configured && supabase && state.session?.user) {
+    const result = wasFavorite
+      ? await supabase.from('favorite_profiles').delete().match({ user_id: state.profile.id, favorite_profile_id: profileId })
+      : await supabase.from('favorite_profiles').insert({ user_id: state.profile.id, favorite_profile_id: profileId });
+    if (result.error) toast(result.error.message || 'Could not update favorites.');
+  }
+  renderDiscover();
+}
+
 function avatarMarkup(person, className = '') {
   const photoUrl = person?.profile_photo_url || '';
   return `<div class="avatar ${className}">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" alt="" />` : escapeHtml(initials(person?.display_name || 'S'))}</div>`;
@@ -142,6 +173,25 @@ function avatarMarkup(person, className = '') {
 
 function completedSessionCount(userId) {
   return state.chats.filter((chat) => chat.participants.includes(userId) && chat.session?.completed).length;
+}
+
+function sessionBalance(profile = state.profile) {
+  return Number(profile?.lumen_balance ?? DEFAULT_SESSIONS);
+}
+
+function updateLocalProfile(profile) {
+  state.profile = { ...state.profile, ...profile };
+  const index = state.localUsers.findIndex((person) => person.id === state.profile.id);
+  if (index >= 0) state.localUsers[index] = { ...state.profile };
+}
+
+async function saveSessionBalance(profile) {
+  if (configured && supabase && state.session?.user) {
+    const { error } = await supabase.from('profiles').update({ lumen_balance: sessionBalance(profile) }).eq('id', profile.id);
+    if (error) throw error;
+  }
+  updateLocalProfile(profile);
+  saveLocalState();
 }
 
 function reviewsForProfile(profileId) {
@@ -162,7 +212,6 @@ function reviewForSession(chatId, reviewerId) {
 }
 
 function shell(content) {
-  const sessions = state.profile ? completedSessionCount(state.profile.id) : 0;
   const nav = state.profile ? `
     <header class="top">
       <div class="topinner">
@@ -172,7 +221,7 @@ function shell(content) {
           <button class="${state.view === 'inbox' ? 'active' : ''}" data-view="inbox">Inbox</button>
           <button class="${state.view === 'settings' ? 'active' : ''}" data-view="settings">Profile</button>
         </nav>
-        <span class="credit">${sessions} ${sessions === 1 ? 'Session' : 'Sessions'}</span>
+        <span class="credit" title="Sessions are your available session balance">✦ ${sessionBalance()} Sessions</span>
       </div>
     </header>
   ` : '';
@@ -269,27 +318,90 @@ async function fetchReviews() {
   }));
 }
 
+async function fetchConversations() {
+  if (!configured || !supabase || !state.session?.user) return;
+  const { data: memberships, error } = await supabase.from('conversation_members')
+    .select('conversation_id,user_id').eq('user_id', state.session.user.id);
+  if (error || !memberships?.length) return;
+  const ids = memberships.map((row) => row.conversation_id);
+  const [{ data: allMembers }, { data: messages }] = await Promise.all([
+    supabase.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids),
+    supabase.from('messages').select('conversation_id,sender_id,body,created_at').in('conversation_id', ids).order('created_at')
+  ]);
+  state.chats = ids.map((id) => {
+    const participants = (allMembers || []).filter((row) => row.conversation_id === id).map((row) => row.user_id);
+    const remoteMessages = (messages || []).filter((row) => row.conversation_id === id);
+    return { id, participants, status: 'active', requesterId: state.session.user.id,
+      messages: remoteMessages.map((row) => ({ sender: row.sender_id, text: row.body })),
+      lastUpdated: remoteMessages.at(-1)?.created_at || Date.now(),
+      session: { date: '', method: 'online', completed: false } };
+  });
+  saveLocalState();
+}
+
+async function fetchFavorites() {
+  if (!configured || !supabase || !state.session?.user) return;
+  const { data, error } = await supabase.from('favorite_profiles').select('favorite_profile_id').eq('user_id', state.profile.id);
+  if (!error) {
+    state.favorites = (data || []).map((row) => row.favorite_profile_id);
+    saveLocalState();
+  }
+}
+
 function searchTokens(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().match(/[\p{L}\p{N}+#]+/gu)?.filter((token) => token.length > 2) || [];
 }
 
+const SUBJECT_HINTS = {
+  Mathematics: ['math', 'mathematics', 'algebra', 'geometry', 'equation', 'inequality', 'calculus', 'matematica', 'ecuatie', 'ecuatii', 'inegalitate', 'inegalitati', 'geometrie'],
+  Physics: ['physics', 'mechanics', 'force', 'motion', 'electricity', 'fizica', 'mecanica', 'forta', 'miscare', 'electricitate'],
+  Chemistry: ['chemistry', 'chemical', 'molecule', 'reaction', 'chimie', 'molecula', 'reactie'],
+  Biology: ['biology', 'cell', 'cells', 'division', 'mitosis', 'meiosis', 'chromosome', 'genetics', 'anatomy', 'biologie', 'celula', 'celule', 'diviziune', 'mitoza', 'meioza', 'cromozom', 'genetica', 'anatomie'],
+  'Computer science': ['programming', 'programare', 'coding', 'code', 'javascript', 'python', 'algorithm', 'algoritm', 'informatics', 'informatica'],
+  English: ['english', 'grammar', 'essay', 'vocabulary', 'engleza', 'gramatica', 'eseu', 'vocabular'],
+  'Romanian language and literature': ['romanian', 'romana', 'literature', 'literatura', 'gramatica', 'poezie', 'poem', 'comentariu'],
+  History: ['history', 'historical', 'istorie', 'istoric'],
+  Geography: ['geography', 'map', 'climate', 'geografie', 'harta', 'clima'],
+  Economics: ['economics', 'business', 'finance', 'economie', 'afaceri', 'finante'],
+  Psychology: ['psychology', 'behavior', 'psihologie', 'comportament']
+};
+
 function searchPeopleByAI(list, result) {
   const queryTerms = new Set(result.searchTerms.flatMap(searchTokens));
   return list.map((person) => {
     const subjectRating = ratingValue(person, result.subject);
-    const profileTerms = new Set(searchTokens([
-      person.main_subject || '',
-      person.bio || '',
-      ...Object.keys(person.subject_ratings || {})
-    ].join(' ')));
+    const profileTerms = new Set(searchTokens([person.main_subject || '', person.bio || '', ...Object.keys(person.subject_ratings || {})].join(' ')));
     const termMatches = [...queryTerms].filter((term) => profileTerms.has(term)).length;
     const hasSubject = subjectRating > 0 || person.main_subject === result.subject;
     const score = termMatches * 2 + subjectRating / 10 + (person.main_subject === result.subject ? 1 : 0);
     return { person, score, termMatches, hasSubject };
   }).filter(({ score, termMatches, hasSubject }) => score > 0 && (hasSubject || termMatches > 0))
-    .sort((a, b) => b.score - a.score)
-    .map(({ person }) => ({ ...person, _searchSubject: result.subject }));
+    .sort((a, b) => b.score - a.score).map(({ person }) => ({ ...person, _searchSubject: result.subject }));
+}
+
+function localAISearch(query) {
+  const tokens = searchTokens(query);
+  const ranked = Object.entries(SUBJECT_HINTS).map(([subject, hints]) => ({ subject, score: hints.filter((hint) => tokens.includes(hint)).length }))
+    .sort((a, b) => b.score - a.score);
+  const subject = ranked[0]?.score ? ranked[0].subject : 'Mathematics';
+  const searchTerms = [...new Set(tokens)].slice(0, 12);
+  return { subject, searchTerms: searchTerms.length ? searchTerms : [subject], message: `Searching locally for students who can help with ${subject}.` };
+}
+
+function subscribeToMessages() {
+  if (!configured || !supabase || !state.session?.user) return;
+  supabase.channel(`stup-messages-${state.session.user.id}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+      const row = payload.new;
+      const chat = state.chats.find((entry) => entry.id === row.conversation_id);
+      if (!chat || row.sender_id === state.profile.id) return;
+      chat.messages.push({ sender: row.sender_id, text: row.body });
+      chat.lastUpdated = row.created_at;
+      saveLocalState();
+      if (state.view === 'inbox') renderInbox();
+    })
+    .subscribe();
 }
 
 function renderDiscover() {
@@ -300,18 +412,16 @@ function renderDiscover() {
   let searchMessage = '';
 
   if (state.searchSubmitted) {
-    if (state.searchMode === 'subject') {
+    if (state.searchMode === 'ai') {
+      filteredPeople = state.aiSearchResult ? searchPeopleByAI(availablePeople, state.aiSearchResult) : [];
+      resultTitle = 'Students with matching strengths';
+      matchedSubject = state.aiSearchResult?.subject || '';
+      searchMessage = state.aiSearchResult?.message || '';
+    } else {
       filteredPeople = availablePeople
         .filter((person) => ratingValue(person, state.filterSubject) >= state.minRating)
         .sort((a, b) => ratingValue(b, state.filterSubject) - ratingValue(a, state.filterSubject));
       resultTitle = `${state.filterSubject}, ${state.minRating}+`;
-    } else {
-      filteredPeople = state.aiSearchResult
-        ? searchPeopleByAI(availablePeople, state.aiSearchResult)
-        : [];
-      resultTitle = 'Students with matching strengths';
-      matchedSubject = state.aiSearchResult?.subject || '';
-      searchMessage = state.aiSearchResult?.message || '';
     }
   } else {
     filteredPeople = availablePeople;
@@ -331,11 +441,11 @@ function renderDiscover() {
           ${[1,2,3,4,5,6,7,8,9,10].map((rating) => `<option value="${rating}" ${Number(state.minRating) === rating ? 'selected' : ''}>${rating}+</option>`).join('')}
         </select>
       ` : `
-        <input id="smartsearch" value="${escapeHtml(state.search)}" placeholder="Describe your problem, e.g. I can't solve inequalities" aria-label="Describe what you need help with" />
+        <input id="smartsearch" value="${escapeHtml(state.search)}" placeholder="Describe what you need help with" aria-label="Describe what you need help with" />
       `}
-      <button class="btn" data-search-submit ${state.aiSearchPending ? 'disabled' : ''}>${state.aiSearchPending ? 'Thinking…' : 'Search'}</button>
+      <button class="btn" data-search-submit ${state.aiSearchPending ? 'disabled' : ''}>${state.aiSearchPending ? 'Searching…' : 'Search'}</button>
     </section>
-    ${state.searchMode === 'ai' ? '<p class="ai-privacy-note">Your question is processed by Google Gemini. Student profile data is not sent to the AI.</p>' : ''}
+    ${state.searchMode === 'ai' ? '<p class="ai-privacy-note">Gemini does not collect or store any of your search queries.</p>' : ''}
     <div class="filters">
       <span class="pill">${escapeHtml(state.profile.county)}</span>
       <span class="pill">${escapeHtml(levelName(state.profile.school_level))}</span>
@@ -346,15 +456,13 @@ function renderDiscover() {
         <b>${escapeHtml(resultTitle)}</b>
         <button class="btn secondary" data-search-clear>Clear</button>
       </div>
-      ${state.searchMode === 'ai' ? `<p class="search-personalized">${escapeHtml(searchMessage || 'AI is looking for students who can help.')}</p>` : ''}
+      ${state.searchMode === 'ai' ? `<p class="search-personalized">${escapeHtml(searchMessage)}</p>` : ''}
     ` : ''}
 
     <div class="cards">
       ${filteredPeople.length ? filteredPeople.map((person) => {
         const tags = subjectTags(person, 4);
-        const searchSubject = state.searchSubmitted
-          ? state.searchMode === 'ai' ? person._searchSubject : state.filterSubject
-          : '';
+        const searchSubject = state.searchSubmitted ? (state.searchMode === 'ai' ? person._searchSubject : state.filterSubject) : '';
         if (searchSubject && !tags.some((tag) => tag.subject === searchSubject)) {
           tags.unshift({ subject: searchSubject, rating: ratingValue(person, searchSubject) });
         } else if (searchSubject) {
@@ -366,7 +474,7 @@ function renderDiscover() {
             <div class="personhead">
               ${avatarMarkup(person)}
               <div class="personinfo">
-                <b>${escapeHtml(person.display_name)}</b>
+                <b>${escapeHtml(person.display_name)} ${person.verified ? '<span class="verified" title="Student ID verified">✓</span>' : ''}</b>
                 <small>${escapeHtml(levelName(person.school_level))} · ${escapeHtml(person.county)}</small>
               </div>
             </div>
@@ -393,6 +501,7 @@ function renderDiscover() {
 
             <div class="person-actions">
               <button class="btn secondary" data-view-profile="${escapeHtml(person.id)}">View profile</button>
+              <button class="btn secondary favorite-button ${isFavorite(person.id) ? 'is-favorite' : ''}" data-favorite="${escapeHtml(person.id)}" aria-label="${isFavorite(person.id) ? 'Remove from favorites' : 'Add to favorites'}">${isFavorite(person.id) ? '♥ Saved' : '♡ Favorite'}</button>
               <button class="btn" data-start-chat="${escapeHtml(person.id)}">Message</button>
             </div>
           </article>
@@ -400,10 +509,8 @@ function renderDiscover() {
       }).join('') : `
         <section class="card empty">
           <div class="avatar">✦</div>
-          <h3>${state.searchSubmitted && state.searchMode === 'ai' ? 'No matching profiles just yet.' : 'No students match that search.'}</h3>
-          <p class="muted">${state.searchSubmitted && state.searchMode === 'ai'
-            ? `We understood that you need help with ${escapeHtml(matchedSubject || 'your topic')}, but no student in your county currently lists a matching strength. Try another description or subject.`
-            : 'Try another subject, lower the rating, or search a different topic.'}</p>
+          <h3>${state.searchMode === 'ai' ? 'No matching profiles just yet.' : 'No students match that search.'}</h3>
+          <p class="muted">${state.searchMode === 'ai' ? `We understood that you need help with ${escapeHtml(matchedSubject || 'your topic')}, but no matching student was found.` : 'Try another subject, lower the rating, or search a different topic.'}</p>
         </section>
       `}
     </div>
@@ -458,60 +565,32 @@ function renderDiscover() {
     button.addEventListener('click', () => openProfileModal(button.dataset.viewProfile));
   });
 
+  document.querySelectorAll('[data-favorite]').forEach((button) => {
+    button.addEventListener('click', () => toggleFavorite(button.dataset.favorite));
+  });
+
 }
 
 async function submitDiscoverSearch() {
-  if (state.aiSearchPending) return;
   if (state.searchMode === 'ai') {
     const query = state.search.trim();
     if (!query) {
       toast('Describe what you need help with first.');
       return;
     }
-    if (!supabase || !configured || !state.session?.user) {
-      toast('Sign in with a configured Supabase project to use AI search.');
-      return;
-    }
-
     state.aiSearchPending = true;
-    state.aiSearchError = '';
     state.searchSubmitted = false;
     state.aiSearchResult = null;
     renderDiscover();
-    try {
-      const { data, error } = await supabase.functions.invoke('ai-search', {
-        body: { query }
-      });
-      if (error) {
-        let message = error.message || 'AI search failed.';
-        if (error.context instanceof Response) {
-          const details = await error.context.json().catch(() => null);
-          if (details?.error) message = details.error;
-        }
-        throw new Error(message);
-      }
-      if (!data || !SUBJECTS.includes(data.subject) || typeof data.message !== 'string' || !Array.isArray(data.searchTerms)) {
-        throw new Error('The AI returned an invalid search result. Please try again.');
-      }
-      state.aiSearchResult = {
-        subject: data.subject,
-        message: data.message.slice(0, 500),
-        searchTerms: data.searchTerms.filter((term) => typeof term === 'string').slice(0, 12)
-      };
-      state.searchSubmitted = true;
-      saveLocalState();
-    } catch (error) {
-      state.aiSearchError = error.message || 'AI search failed.';
-      toast(state.aiSearchError);
-    } finally {
-      state.aiSearchPending = false;
-      renderDiscover();
-    }
+    state.aiSearchResult = localAISearch(query);
+    state.searchSubmitted = true;
+    state.aiSearchPending = false;
+    saveLocalState();
+    renderDiscover();
     return;
   }
 
   state.searchSubmitted = true;
-  state.aiSearchResult = null;
   saveLocalState();
   renderDiscover();
 }
@@ -548,6 +627,7 @@ function openProfileModal(personId) {
         </div>
       </div>
       <p>${escapeHtml(person.bio || 'No bio added yet.')}</p>
+      ${person.verified ? '<span class="tag">Verified student</span>' : '<span class="muted small">Student ID pending verification</span>'}
       <h3>Subject ratings</h3>
       ${tags.length ? `<div class="subject-ratings">
         ${tags.map(({ subject, rating }) => `
@@ -580,6 +660,7 @@ function openProfileModal(personId) {
         `;
       })()}
       <div class="row">
+        <button class="btn secondary favorite-button ${isFavorite(person.id) ? 'is-favorite' : ''}" data-profile-favorite>${isFavorite(person.id) ? '♥ Saved' : '♡ Favorite'}</button>
         <button class="btn" data-profile-message>Message</button>
         <button class="btn secondary" data-profile-close>Close</button>
       </div>
@@ -607,9 +688,13 @@ function openProfileModal(personId) {
     close();
     startOrOpenChat(personId);
   });
+  modal.querySelector('[data-profile-favorite]').addEventListener('click', async () => {
+    await toggleFavorite(personId);
+    close();
+  });
 }
 
-function startOrOpenChat(otherUserId) {
+async function startOrOpenChat(otherUserId) {
   const currentId = state.profile.id;
   const existingChat = state.chats.find((chat) => chat.participants.includes(currentId) && chat.participants.includes(otherUserId));
   if (existingChat) {
@@ -621,15 +706,33 @@ function startOrOpenChat(otherUserId) {
   }
 
   const otherUser = state.people.find((person) => person.id === otherUserId) || state.localUsers.find((person) => person.id === otherUserId);
+  let conversationId = `chat-${Date.now()}`;
+  if (configured && supabase && state.session?.user) {
+    const { data, error } = await supabase.rpc('get_or_create_conversation', { other_user: otherUserId });
+    if (error) {
+      toast(error.message || 'Could not start the conversation.');
+      return;
+    }
+    conversationId = data;
+  }
+  const openingText = `Hi ${otherUser?.display_name?.split(' ')[0] || 'there'}, can I ask you about ${topSubject(otherUser || state.profile)}?`;
   const newChat = {
-    id: `chat-${Date.now()}`,
+    id: conversationId,
     participants: [currentId, otherUserId],
-    status: 'pending',
+    status: 'active',
     requesterId: currentId,
-    messages: [{ sender: currentId, text: `Hi ${otherUser?.display_name?.split(' ')[0] || 'there'}, can I ask you about ${topSubject(otherUser || state.profile)}?` }],
+    messages: [{ sender: currentId, text: openingText }],
     lastUpdated: Date.now(),
     session: { date: '', method: 'online', completed: false }
   };
+
+  if (configured && supabase && state.session?.user) {
+    const { error } = await supabase.from('messages').insert({ conversation_id: conversationId, sender_id: currentId, body: openingText });
+    if (error) {
+      toast(error.message || 'Could not send the message request.');
+      return;
+    }
+  }
 
   state.chats.unshift(newChat);
   state.activeChatId = newChat.id;
@@ -722,13 +825,6 @@ function renderThread(chat) {
     </div>
   `;
 
-  if (chat.status === 'pending') {
-    const isRequester = chat.requesterId === currentUserId;
-    body += isRequester
-      ? '<p class="muted">Waiting for them to accept the request.</p>'
-      : '<div class="row"><button class="btn" data-accept>Accept</button><button class="btn secondary" data-decline>Decline</button></div>';
-  }
-
   if (chat.status === 'active') {
     body += `
       <div class="sendform">
@@ -785,12 +881,23 @@ function declineChat(chatId) {
   render();
 }
 
-function sendMessage(chatId) {
+async function sendMessage(chatId) {
   const input = document.querySelector('#messageInput');
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat || !input) return;
   const text = input.value.trim();
   if (!text) return;
+  if (BLOCKED_COMMENT_WORDS.test(text)) {
+    toast('Message blocked. Keep the conversation respectful.');
+    return;
+  }
+  if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-')) {
+    const { error } = await supabase.from('messages').insert({ conversation_id: chatId, sender_id: state.profile.id, body: text });
+    if (error) {
+      toast(error.message || 'Could not send your message.');
+      return;
+    }
+  }
   chat.messages.push({ sender: state.profile.id, text });
   chat.lastUpdated = Date.now();
   saveLocalState();
@@ -800,24 +907,52 @@ function sendMessage(chatId) {
 function bookSession(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
+  if (sessionBalance() < 1) {
+    toast('You need 1 session credit to book. Complete a teaching session to earn one.');
+    return;
+  }
   const date = window.prompt('Choose a date and time (YYYY-MM-DD HH:mm)', '2026-11-02 18:30');
   if (!date) return;
   const method = window.prompt('Session type: online or in-person?', 'online');
+  const normalizedMethod = (method || 'online').toLowerCase().includes('in') ? 'in-person' : 'online';
+  if (normalizedMethod === 'in-person' && !state.profile.verified) {
+    toast('In-person sessions require a verified student ID. Choose online or verify your profile first.');
+    return;
+  }
+  if (Number.isNaN(new Date(date.replace(' ', 'T')).getTime())) {
+    toast('Choose a valid date and time.');
+    return;
+  }
   chat.session = {
     date,
-    method: (method || 'online').toLowerCase().includes('in') ? 'in-person' : 'online',
-    completed: false
+    method: normalizedMethod,
+    completed: false,
+    paid: true
   };
+  state.profile.lumen_balance = sessionBalance() - 1;
   chat.messages.push({ sender: state.profile.id, text: `Session booked for ${date} (${chat.session.method}).` });
-  saveLocalState();
+  saveSessionBalance(state.profile).catch((error) => toast(error.message || 'Could not save your session balance.'));
   render();
 }
 
-function completeSession(chatId) {
+async function completeSession(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
   chat.session.completed = true;
   chat.messages.push({ sender: state.profile.id, text: 'Session completed — thanks for the help.' });
+  const partnerId = chat.participants.find((userId) => userId !== state.profile.id);
+  const partner = getPersonById(partnerId);
+  if (partner) {
+    partner.lumen_balance = sessionBalance(partner) + 1;
+    if (configured && supabase && state.session?.user && partner.id !== state.profile.id) {
+      const { error } = await supabase.from('profiles').update({ lumen_balance: partner.lumen_balance }).eq('id', partner.id);
+      if (error) {
+        toast(error.message || 'Session marked complete, but the teacher reward could not be saved.');
+        return;
+      }
+    }
+    if (partner.id === state.profile.id) updateLocalProfile(partner);
+  }
   saveLocalState();
   render();
 }
@@ -868,6 +1003,10 @@ function openReviewModal(chatId) {
   modal.querySelector('[data-submit-review]').addEventListener('click', async () => {
     const rating = Number(modal.querySelector('#review-rating').value);
     const comment = modal.querySelector('#review-comment').value.trim();
+    if (comment && BLOCKED_COMMENT_WORDS.test(comment)) {
+      toast('Comment blocked. Keep feedback respectful and free of insults.');
+      return;
+    }
     const review = {
       id: `review-${Date.now()}`,
       targetProfileId,
@@ -931,7 +1070,7 @@ function openReportModal(chatId) {
 
   document.body.appendChild(modal);
 
-  modal.querySelector('#reportSubmit').addEventListener('click', () => {
+  modal.querySelector('#reportSubmit').addEventListener('click', async () => {
     const reason = document.querySelector('#reportReason').value.trim();
     if (!reason || reason.length < 10) {
       toast('Please add a short explanation.');
@@ -946,6 +1085,19 @@ function openReportModal(chatId) {
       createdAt: new Date().toISOString(),
       chatId
     };
+
+    if (configured && supabase && state.session?.user) {
+      const { error } = await supabase.from('reports').insert({
+        target_profile_id: partnerId,
+        reporter_profile_id: state.profile.id,
+        conversation_id: chatId,
+        reason
+      });
+      if (error) {
+        toast(error.message || 'Could not send report.');
+        return;
+      }
+    }
 
     const key = `stup-reports-v1`;
     const existing = JSON.parse(localStorage.getItem(key) || '[]');
@@ -969,6 +1121,10 @@ function renderSettings() {
     <section class="settings">
       <h1>Your profile</h1>
       <div class="card form">
+        <div class="profile-summary">
+          <strong>✦ ${sessionBalance()} Sessions</strong>
+          <span class="muted small">Spend 1 session credit to book. Teaching earns it back.</span>
+        </div>
         <div class="profile-photo-setting">
           ${avatarMarkup(state.profile, 'profile-photo-preview')}
           <label for="profile-photo">Profile picture</label>
@@ -995,6 +1151,10 @@ function renderSettings() {
           Bio
           <textarea id="profile-bio" rows="3">${escapeHtml(state.profile.bio || '')}</textarea>
         </label>
+        <div class="notice">
+          <strong>${state.profile.verified ? '✓ Student ID verified' : 'Student ID pending verification'}</strong>
+          <p class="muted small">${state.profile.verified ? 'In-person sessions are available.' : 'Online sessions are available now. A verified ID is required for in-person meetings.'}</p>
+        </div>
 
         <div class="subject-ratings">
           ${SUBJECTS.map((subject) => `
@@ -1259,6 +1419,7 @@ function authScreen(mode = 'signup') {
               main_subject: 'Mathematics',
               subject_ratings: {},
               bio: '',
+              lumen_balance: DEFAULT_SESSIONS,
               verified: false,
               student_id_photo_url: photoUrl || null,
               profile_photo_url: null
@@ -1269,6 +1430,7 @@ function authScreen(mode = 'signup') {
             state.people = [];
             state.view = 'discover';
             await fetchReviews();
+            await fetchFavorites();
             saveLocalState();
             await render();
             return;
@@ -1283,6 +1445,7 @@ function authScreen(mode = 'signup') {
           main_subject: 'Mathematics',
           subject_ratings: {},
           bio: '',
+          lumen_balance: DEFAULT_SESSIONS,
           verified: false,
           student_id_photo_url: studentPhoto && studentPhoto.size ? await readDataUrl(studentPhoto) : '',
           profile_photo_url: '',
@@ -1306,10 +1469,13 @@ function authScreen(mode = 'signup') {
         state.session = data.session;
         const { data: profileRow, error: profileErr } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
         if (profileErr) throw profileErr;
-        state.profile = profileRow || { id: data.user.id, display_name: data.user.email.split('@')[0], school_level: 1, county: 'București', main_subject: 'Mathematics', subject_ratings: {}, bio: '', verified: false, student_id_photo_url: '', profile_photo_url: '' };
+        state.profile = profileRow || { id: data.user.id, display_name: data.user.email.split('@')[0], school_level: 1, county: 'București', main_subject: 'Mathematics', subject_ratings: {}, bio: '', lumen_balance: DEFAULT_SESSIONS, verified: false, student_id_photo_url: '', profile_photo_url: '' };
         state.view = 'discover';
         await fetchPeople();
         await fetchReviews();
+        await fetchConversations();
+        await fetchFavorites();
+        subscribeToMessages();
         saveLocalState();
         render();
         return;
@@ -1349,6 +1515,9 @@ async function bootstrap() {
     }
     await fetchPeople();
     await fetchReviews();
+    await fetchConversations();
+    await fetchFavorites();
+    subscribeToMessages();
   }
 
   render();
