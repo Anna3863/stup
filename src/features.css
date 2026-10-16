@@ -14,4 +14,16 @@
 .own-rating-reviews p{margin:5px 0;color:var(--mu);font-size:13px}
 .own-rating-reviews .review-stars{color:var(--ac-strong);font-size:12px;margin-left:5px}
 @media(max-width:520px){.own-rating-card{grid-template-columns:1fr}.own-rating-value{justify-items:start}}
+.avatar.has-photo{padding:0;background:transparent}
+.avatar.has-photo img{border-radius:50%}
+.presence{color:var(--mu)}
+.presence.online{color:#7edb9a}
+.inbox-back{margin-bottom:12px}
+@media(max-width:640px){.inboxgrid{display:block}.inbox-contacts.mobile-hidden,.thread.mobile-hidden{display:none}.inbox-contacts,.thread{min-height:0}}
+.rating-editor-row{transition:opacity .16s,color .16s}
+.rating-editor-row.rating-disabled{opacity:.48}
+.rating-editor-row input[type='range']{appearance:none;height:14px;width:100%;margin:5px 0 2px;border:0;border-radius:999px;background:linear-gradient(90deg,var(--ac) 0 var(--rating),rgba(255,255,255,.1) var(--rating) 100%);cursor:pointer;accent-color:var(--ac);touch-action:none}
+.rating-editor-row input[type='range']::-webkit-slider-thumb{appearance:none;width:0;height:0;border:0;background:transparent;box-shadow:none}
+.rating-editor-row input[type='range']::-moz-range-thumb{width:0;height:0;border:0;background:transparent;box-shadow:none}
+.rating-editor-row input[type='range']::-moz-range-progress{height:14px;border-radius:999px;background:var(--ac)}
 @media(max-width:640px){.profile-summary{align-items:flex-start;flex-direction:column}}

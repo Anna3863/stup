@@ -17,6 +17,7 @@ const state = {
   reviewsLoadError: '',
   chats: [],
   favorites: [],
+  onlineUsers: new Set(),
   localUsers: [],
   view: 'discover',
   searchMode: 'subject',
@@ -27,7 +28,8 @@ const state = {
   aiSearchPending: false,
   filterSubject: 'Mathematics',
   minRating: 7,
-  activeChatId: null
+  activeChatId: null,
+  inboxListOpen: true
 };
 
 const DEFAULT_SESSIONS = 3;
@@ -168,7 +170,15 @@ async function toggleFavorite(profileId) {
 
 function avatarMarkup(person, className = '') {
   const photoUrl = person?.profile_photo_url || '';
-  return `<div class="avatar ${className}">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" alt="" />` : escapeHtml(initials(person?.display_name || 'S'))}</div>`;
+  return `<div class="avatar ${photoUrl ? 'has-photo' : ''} ${className}">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" alt="" />` : escapeHtml(initials(person?.display_name || 'S'))}</div>`;
+}
+
+function isPersonActive(personId) {
+  return state.onlineUsers.has(personId);
+}
+
+function messageMarkup(text) {
+  return escapeHtml(text).replace(/(https:\/\/meet\.google\.com\/new)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 
 function completedSessionCount(userId) {
@@ -231,6 +241,7 @@ function shell(content) {
   document.querySelectorAll('[data-view]').forEach((button) => {
     button.addEventListener('click', () => {
       state.view = button.dataset.view;
+      if (state.view === 'inbox') state.inboxListOpen = true;
       saveLocalState();
       render();
     });
@@ -402,6 +413,17 @@ function subscribeToMessages() {
       if (state.view === 'inbox') renderInbox();
     })
     .subscribe();
+}
+
+function subscribeToPresence() {
+  if (!configured || !supabase || !state.session?.user) return;
+  supabase.channel('stup-presence', { config: { presence: { key: state.session.user.id } } })
+    .on('presence', { event: 'sync' }, () => {
+      const presenceState = supabase.getChannels().find((channel) => channel.topic === 'realtime:stup-presence')?.presenceState() || {};
+      state.onlineUsers = new Set(Object.keys(presenceState));
+      if (state.view === 'inbox') renderInbox();
+    })
+    .track({ online_at: new Date().toISOString() });
 }
 
 function renderDiscover() {
@@ -662,6 +684,7 @@ function openProfileModal(personId) {
       <div class="row">
         <button class="btn secondary favorite-button ${isFavorite(person.id) ? 'is-favorite' : ''}" data-profile-favorite>${isFavorite(person.id) ? '♥ Saved' : '♡ Favorite'}</button>
         <button class="btn" data-profile-message>Message</button>
+        <button class="btn secondary" data-profile-report>Report</button>
         <button class="btn secondary" data-profile-close>Close</button>
       </div>
     </section>
@@ -692,6 +715,7 @@ function openProfileModal(personId) {
     await toggleFavorite(personId);
     close();
   });
+  modal.querySelector('[data-profile-report]').addEventListener('click', () => openReportModal(personId));
 }
 
 async function startOrOpenChat(otherUserId) {
@@ -715,24 +739,15 @@ async function startOrOpenChat(otherUserId) {
     }
     conversationId = data;
   }
-  const openingText = `Hi ${otherUser?.display_name?.split(' ')[0] || 'there'}, can I ask you about ${topSubject(otherUser || state.profile)}?`;
   const newChat = {
     id: conversationId,
     participants: [currentId, otherUserId],
     status: 'active',
     requesterId: currentId,
-    messages: [{ sender: currentId, text: openingText }],
+    messages: [],
     lastUpdated: Date.now(),
     session: { date: '', method: 'online', completed: false }
   };
-
-  if (configured && supabase && state.session?.user) {
-    const { error } = await supabase.from('messages').insert({ conversation_id: conversationId, sender_id: currentId, body: openingText });
-    if (error) {
-      toast(error.message || 'Could not send the message request.');
-      return;
-    }
-  }
 
   state.chats.unshift(newChat);
   state.activeChatId = newChat.id;
@@ -743,13 +758,14 @@ async function startOrOpenChat(otherUserId) {
 
 function renderInbox() {
   const currentUserId = state.profile.id;
+  const isMobile = window.matchMedia('(max-width: 640px)').matches;
   const chats = state.chats.filter((chat) => chat.participants.includes(currentUserId));
   const activeChat = chats.find((chat) => chat.id === state.activeChatId) || chats[0] || null;
   if (activeChat) state.activeChatId = activeChat.id;
 
   shell(`
     <div class="inboxgrid">
-      <section class="card">
+      <section class="card inbox-contacts ${isMobile && !state.inboxListOpen ? 'mobile-hidden' : ''}">
         <h2>Inbox</h2>
         ${chats.length ? chats.map((chat) => {
           const partnerId = chat.participants.find((personId) => personId !== currentUserId);
@@ -759,14 +775,15 @@ function renderInbox() {
               ${avatarMarkup(partner, 'small-avatar')}
               <span>
                 <b>${escapeHtml(partner?.display_name || 'Student')}</b>
-                <small>${escapeHtml(chat.status)}</small>
+              <small>${isPersonActive(partnerId) ? 'Active now' : 'Offline'}</small>
               </span>
             </button>
           `;
         }).join('') : '<p class="muted">No conversations yet.</p>'}
       </section>
 
-      <section class="card thread">
+      <section class="card thread ${isMobile && state.inboxListOpen ? 'mobile-hidden' : ''}">
+        ${isMobile && activeChat ? '<button class="btn secondary inbox-back" data-inbox-back>← All contacts</button>' : ''}
         ${activeChat ? renderThread(activeChat) : '<div class="emptyline">Start a conversation from Discover.</div>'}
       </section>
     </div>
@@ -775,27 +792,29 @@ function renderInbox() {
   document.querySelectorAll('[data-chat-id]').forEach((button) => {
     button.addEventListener('click', () => {
       state.activeChatId = button.dataset.chatId;
+      state.inboxListOpen = false;
       saveLocalState();
       renderInbox();
     });
   });
 
+  document.querySelector('[data-inbox-back]')?.addEventListener('click', () => {
+    state.inboxListOpen = true;
+    renderInbox();
+  });
+
   const acceptButton = document.querySelector('[data-accept]');
   const declineButton = document.querySelector('[data-decline]');
   const sendButton = document.querySelector('[data-send]');
-  const bookButton = document.querySelector('[data-book]');
   const finishButton = document.querySelector('[data-finish]');
   const rateButton = document.querySelector('[data-rate-session]');
-  const reportButton = document.querySelector('[data-report]');
   const meetButton = document.querySelector('[data-meet]');
 
   if (acceptButton) acceptButton.addEventListener('click', () => acceptChat(activeChat.id));
   if (declineButton) declineButton.addEventListener('click', () => declineChat(activeChat.id));
   if (sendButton) sendButton.addEventListener('click', () => sendMessage(activeChat.id));
-  if (bookButton) bookButton.addEventListener('click', () => bookSession(activeChat.id));
   if (finishButton) finishButton.addEventListener('click', () => completeSession(activeChat.id));
   if (rateButton) rateButton.addEventListener('click', () => openReviewModal(activeChat.id));
-  if (reportButton) reportButton.addEventListener('click', () => openReportModal(activeChat.id));
   if (meetButton) meetButton.addEventListener('click', () => openMeetLink(activeChat.id));
 }
 
@@ -808,7 +827,7 @@ function renderThread(chat) {
       ${avatarMarkup(partner)}
       <div>
         <b>${escapeHtml(partner?.display_name || 'Student')}</b>
-        <small>${escapeHtml(chat.status)}</small>
+        <small class="presence ${isPersonActive(partner?.id) ? 'online' : ''}">${isPersonActive(partner?.id) ? 'Active now' : 'Offline'}</small>
       </div>
     </div>
 
@@ -817,7 +836,7 @@ function renderThread(chat) {
         const mine = message.sender === currentUserId;
         return `
           <div class="bubble ${mine ? 'mine' : ''}">
-            <p>${escapeHtml(message.text)}</p>
+            <p>${messageMarkup(message.text)}</p>
             <small>${mine ? 'You' : escapeHtml(partner?.display_name || 'Them')}</small>
           </div>
         `;
@@ -843,16 +862,10 @@ function renderThread(chat) {
               ? '<span class="muted">You rated this session.</span>'
               : '<button class="btn" data-rate-session>Rate and comment</button>')
             : '<button class="btn" data-finish>Session complete</button>'}
-          <button class="btn secondary" data-report>Report</button>
         </div>
-      ` : `
-        <div class="row">
-          <button class="btn" data-book>Book a session</button>
-          <button class="btn secondary" data-report>Report</button>
-        </div>
-      `}
+      ` : '<p class="muted meeting-note">No date booking is needed. Start a Google Meet when you are ready.</p>'}
       <div class="row">
-        <button class="btn secondary" data-meet>Start Google Meet</button>
+        <button class="btn" data-meet>Open Google Meet</button>
       </div>
     `;
   }
@@ -1045,14 +1058,24 @@ function openReviewModal(chatId) {
 function openMeetLink(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
-  window.open('https://meet.google.com/new', '_blank', 'noopener,noreferrer');
+  const meetUrl = 'https://meet.google.com/new';
+  window.open(meetUrl, '_blank', 'noopener,noreferrer');
+  const alreadyShared = chat.messages.some((message) => message.text === meetUrl);
+  if (!alreadyShared) {
+    chat.messages.push({ sender: state.profile.id, text: `Google Meet link: ${meetUrl}` });
+    chat.lastUpdated = Date.now();
+    saveLocalState();
+    if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-')) {
+      supabase.from('messages').insert({ conversation_id: chatId, sender_id: state.profile.id, body: `Google Meet link: ${meetUrl}` })
+        .then(({ error }) => { if (error) toast(error.message || 'The meeting link was not sent.'); });
+    }
+    renderInbox();
+  }
 }
 
-function openReportModal(chatId) {
-  const chat = state.chats.find((entry) => entry.id === chatId);
-  if (!chat) return;
-  const partnerId = chat.participants.find((personId) => personId !== state.profile.id);
+function openReportModal(partnerId, chatId = 'profile') {
   const partner = getPersonById(partnerId);
+  if (!partner) return;
 
   const modal = document.createElement('div');
   modal.className = 'report-modal';
@@ -1172,11 +1195,10 @@ function renderSettings() {
 
         <div class="subject-ratings">
           ${SUBJECTS.map((subject) => `
-            <div class="rating-row">
+            <div class="rating-row rating-editor-row ${ratingValue(state.profile, subject) === 0 ? 'rating-disabled' : ''}">
               <span>${escapeHtml(subject)}</span>
-              <span class="rating-number">${ratingValue(state.profile, subject) || 0}/10</span>
-              <div class="ratingbar"><i style="width:${(ratingValue(state.profile, subject) || 0) * 10}%"></i></div>
-              <input type="range" min="0" max="10" step="1" value="${ratingValue(state.profile, subject) || 0}" data-subject="${escapeHtml(subject)}" />
+              <span class="rating-number" data-rating-value>${ratingValue(state.profile, subject) || 0}/10</span>
+              <input type="range" min="0" max="10" step="1" value="${ratingValue(state.profile, subject) || 0}" data-subject="${escapeHtml(subject)}" style="--rating:${(ratingValue(state.profile, subject) || 0) * 10}%" aria-label="${escapeHtml(subject)} rating" />
             </div>
           `).join('')}
         </div>
@@ -1206,6 +1228,18 @@ function renderSettings() {
     image.alt = '';
     const preview = document.querySelector('.profile-photo-preview');
     preview.replaceChildren(image);
+  });
+
+  document.querySelectorAll('[data-subject]').forEach((input) => {
+    const row = input.closest('.rating-editor-row');
+    const valueLabel = row.querySelector('[data-rating-value]');
+    const updateRatingPreview = () => {
+      const value = Number(input.value);
+      valueLabel.textContent = `${value}/10`;
+      input.style.setProperty('--rating', `${value * 10}%`);
+      row.classList.toggle('rating-disabled', value === 0);
+    };
+    input.addEventListener('input', updateRatingPreview);
   });
 
   const saveButton = document.querySelector('#save-profile');
@@ -1533,6 +1567,7 @@ function authScreen(mode = 'signup') {
         await fetchConversations();
         await fetchFavorites();
         subscribeToMessages();
+        subscribeToPresence();
         saveLocalState();
         render();
         return;
@@ -1613,6 +1648,7 @@ async function bootstrap() {
     await fetchConversations();
     await fetchFavorites();
     subscribeToMessages();
+    subscribeToPresence();
   }
 
   render();
