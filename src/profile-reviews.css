@@ -1,0 +1,10 @@
+.profile-modal{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.58);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+.profile-panel{width:min(100%,520px);max-height:90vh;overflow-y:auto;margin:0}
+.profile-rating{color:var(--ac-strong);font-weight:700}
+.profile-reviews{display:grid;gap:10px}
+.review{padding:12px;border:1px solid var(--ln);border-radius:10px;background:var(--bg-soft)}
+.review p{margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.review-heading{display:flex;justify-content:space-between;gap:12px}
+.review-stars{color:var(--ac-strong)}
+.review-comment-label{display:block;margin-bottom:6px;font-weight:600}
+#review-rating{width:100%;border:1px solid var(--ln);background:var(--bg-soft);border-radius:10px;padding:11px 12px;color:var(--tx)}

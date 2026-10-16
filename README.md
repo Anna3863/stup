@@ -14,7 +14,7 @@ This is a small, low-cost step toward turning the original `stup_v2.html` protot
 3. Paste and run all of `supabase/schema.sql`.
 4. In **Project Settings → API** (or Connect), copy the Project URL and the publishable/anon client key. Never use the `service_role` secret in a browser app.
 
-If you already created the database from the earlier stup MVP, run only `supabase/migration_subject_ratings.sql` in SQL Editor. Do not rerun the full schema on an existing database, because its policies already exist.
+If you already created the database from the earlier stup MVP, run `supabase/migration_subject_ratings.sql`, `supabase/migration_profile_reviews.sql`, and `supabase/migration_profile_fields.sql` in SQL Editor. The profile fields migration adds the bio, verification flag, and student-photo URL columns required by profile creation and saving, then asks PostgREST to reload its schema cache. If you still see a `bio` column/schema-cache error, confirm the migration ran successfully and wait briefly for the API cache to refresh before saving again. The profile reviews migration also adds the profile-picture column and configures the `profile-photos` bucket. Do not rerun the full schema on an existing database, because its policies already exist.
 
 ## 3. Configure and run locally
 ```bash
@@ -34,10 +34,26 @@ Open the local URL printed by Vite.
 
 On Windows PowerShell, `Copy-Item .env.example .env` can replace the `cp` command.
 
-## 4. Supabase Auth settings
+## 4. Enable multilingual AI search
+AI search uses a Supabase Edge Function so the Gemini key is never exposed in the browser. Only the submitted search text and the app's allowed subject names are sent to Gemini; student profile data is matched locally and is not sent to the AI provider.
+
+1. Create a Gemini API key in Google AI Studio. Gemini API free-tier availability and limits depend on Google's current terms.
+2. Install and sign in to the [Supabase CLI](https://supabase.com/docs/guides/cli), then link this folder to your Supabase project with `supabase link`.
+3. Add the key as a Supabase secret (do not add it to `.env` or frontend code):
+   ```bash
+   supabase secrets set GEMINI_API_KEY=your-key
+   ```
+4. Deploy the function:
+   ```bash
+   supabase functions deploy ai-search
+   ```
+
+The function defaults to `gemini-2.5-flash`. To select another Gemini model supported by your API key, set `GEMINI_MODEL` as a Supabase secret. AI search requires a signed-in user and a configured Supabase project. If the function or key is not configured, the app reports that instead of pretending a local match is AI.
+
+## 5. Supabase Auth settings
 For local testing, in **Authentication → URL Configuration**, add your local Vite URL (usually `http://localhost:5173`) to the allowed redirect URLs. Configure the production domain after deployment. Keep email confirmation enabled for a real launch.
 
-## 5. Deploy free/cheap
+## 6. Deploy free/cheap
 - Push this folder to a private or public GitHub repository.
 - Import the repository into Vercel or another static host.
 - Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as deployment environment variables.
@@ -53,8 +69,11 @@ For local testing, in **Authentication → URL Configuration**, add your local V
 ## Files you will most likely edit
 - `src/main.js` — signup, discovery filters, student cards, and the 1–10 subject rating controls.
 - `src/style.css` — visual style and layout for the subject scales/cards.
+- `src/ora-search.css` — Ora-style search controls and result highlighting.
 - `supabase/schema.sql` — database structure for a fresh project.
 - `supabase/migration_subject_ratings.sql` — adds subject ratings to a database made from the earlier MVP.
+- `supabase/migration_profile_reviews.sql` — adds profile star ratings and comments to an existing database.
+- `supabase/functions/ai-search/index.ts` — authenticated multilingual Gemini search endpoint.
 - `stup_v2_original.html` — untouched original prototype for reference; the running Vite app uses `src/main.js` and `src/style.css`.
 
 ## Current feature scope
@@ -62,7 +81,10 @@ For local testing, in **Authentication → URL Configuration**, add your local V
 - Profile storage and editing in PostgreSQL
 - Rate every subject from 1–10 (or leave it unselected)
 - Discover profiles in the same county and filter by subject/minimum rating
+- Search for study help in natural language with multilingual AI (requires deploying the Supabase Edge Function and configuring a Gemini API key)
 - Start or reopen a direct conversation
+- Count completed sessions in the navigation
+- Post a 1–5 star rating and optional comment after a completed session; show reviews on student profiles
 - Persistent messages with Realtime updates
 - Responsive UI based on stup's existing purple/gradient style
 

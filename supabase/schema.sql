@@ -1,5 +1,5 @@
 -- stup MVP schema. Run in Supabase SQL Editor.
--- This MVP deliberately does NOT collect CNPs, phone numbers, or ID photos.
+-- Do not store CNPs, phone numbers, or identity-document images in profiles.
 create extension if not exists pgcrypto;
 
 create table if not exists public.profiles (
@@ -9,11 +9,31 @@ create table if not exists public.profiles (
   county text not null default 'București' check (char_length(county) between 2 and 50),
   main_subject text not null default 'Mathematics' check (char_length(main_subject) between 2 and 100),
   subject_ratings jsonb not null default '{}'::jsonb check (jsonb_typeof(subject_ratings) = 'object'),
+  bio text not null default '',
+  verified boolean not null default false,
+  student_id_photo_url text,
+  profile_photo_url text,
   created_at timestamptz not null default now()
 );
 
 -- Safe to re-run on an existing stup database: adds the multi-subject rating field.
 alter table public.profiles add column if not exists subject_ratings jsonb not null default '{}'::jsonb;
+alter table public.profiles add column if not exists bio text not null default '';
+alter table public.profiles add column if not exists verified boolean not null default false;
+alter table public.profiles add column if not exists student_id_photo_url text;
+alter table public.profiles add column if not exists profile_photo_url text;
+
+create table if not exists public.profile_reviews (
+  id uuid primary key default gen_random_uuid(),
+  target_profile_id uuid not null references public.profiles(id) on delete cascade,
+  reviewer_profile_id uuid not null references public.profiles(id) on delete cascade,
+  session_id text not null,
+  rating smallint not null check (rating between 1 and 5),
+  comment text not null default '' check (char_length(comment) <= 1000),
+  created_at timestamptz not null default now(),
+  unique (target_profile_id, reviewer_profile_id, session_id),
+  check (target_profile_id <> reviewer_profile_id)
+);
 
 create table if not exists public.conversations (
   id uuid primary key default gen_random_uuid(),
@@ -36,11 +56,13 @@ create index if not exists messages_conversation_created_idx on public.messages(
 create index if not exists profiles_county_idx on public.profiles(county);
 
 alter table public.profiles enable row level security;
+alter table public.profile_reviews enable row level security;
 alter table public.conversations enable row level security;
 alter table public.conversation_members enable row level security;
 alter table public.messages enable row level security;
 
 grant select, insert, update on public.profiles to authenticated;
+grant select, insert on public.profile_reviews to authenticated;
 grant select, insert on public.conversations to authenticated;
 grant select, insert on public.conversation_members to authenticated;
 grant select, insert on public.messages to authenticated;
@@ -48,6 +70,27 @@ grant select, insert on public.messages to authenticated;
 create policy "Signed-in users can discover basic profiles" on public.profiles for select to authenticated using (true);
 create policy "Users can create their own profile" on public.profiles for insert to authenticated with check (id = auth.uid());
 create policy "Users can update their own profile" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+create policy "Signed-in users can read profile reviews" on public.profile_reviews for select to authenticated using (true);
+create policy "Users can post reviews as themselves" on public.profile_reviews for insert to authenticated with check (
+  reviewer_profile_id = auth.uid() and target_profile_id <> auth.uid()
+);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('profile-photos', 'profile-photos', true, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+create policy "Users can upload their profile pictures" on storage.objects for insert to authenticated
+with check (bucket_id = 'profile-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "Users can update their profile pictures" on storage.objects for update to authenticated
+using (bucket_id = 'profile-photos' and (storage.foldername(name))[1] = auth.uid()::text)
+with check (bucket_id = 'profile-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "Users can delete their profile pictures" on storage.objects for delete to authenticated
+using (bucket_id = 'profile-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+notify pgrst, 'reload schema';
 
 create or replace function public.is_conversation_member(target_conversation uuid, target_user uuid default auth.uid())
 returns boolean
