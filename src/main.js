@@ -1116,10 +1116,24 @@ function openReportModal(chatId) {
 function renderSettings() {
   let selectedProfilePhoto = null;
   let previewObjectUrl = '';
+  const ownReviewSummary = reviewSummary(state.profile.id);
+  const ownReviews = reviewsForProfile(state.profile.id);
 
   shell(`
     <section class="settings">
       <h1>Your profile</h1>
+      <div class="card own-rating-card">
+        <div>
+          <strong>Your student rating</strong>
+          <p class="muted small">Based on feedback from completed sessions.</p>
+        </div>
+        <div class="own-rating-value">
+          <span class="review-stars" aria-label="${ownReviewSummary.count ? `${escNumber(ownReviewSummary.average)} out of 5 stars` : 'No ratings yet'}">${ownReviewSummary.count ? `${'★'.repeat(Math.round(ownReviewSummary.average))}${'☆'.repeat(5 - Math.round(ownReviewSummary.average))}` : '☆☆☆☆☆'}</span>
+          <b>${ownReviewSummary.count ? `${escNumber(ownReviewSummary.average)} / 5` : 'No ratings yet'}</b>
+          ${ownReviewSummary.count ? `<small class="muted">${ownReviewSummary.count} ${ownReviewSummary.count === 1 ? 'rating' : 'ratings'}</small>` : ''}
+        </div>
+        ${ownReviews.length ? `<div class="own-rating-reviews">${ownReviews.slice(0, 3).map((review) => `<p>“${escapeHtml(review.comment || 'Session rating')}” <span class="review-stars">${'★'.repeat(review.rating)}</span></p>`).join('')}</div>` : ''}
+      </div>
       <div class="card form">
         <div class="profile-summary">
           <strong>✦ ${sessionBalance()} Sessions</strong>

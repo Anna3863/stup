@@ -7,4 +7,11 @@
 .report-panel textarea{margin:10px 0}
 .favorite-button{white-space:nowrap}
 .favorite-button.is-favorite{color:#ffb36d;border-color:rgba(217,106,45,.45);background:rgba(217,106,45,.12)}
+.own-rating-card{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}
+.own-rating-value{display:grid;justify-items:end;gap:2px}
+.own-rating-value .review-stars{font-size:18px;color:var(--ac-strong);letter-spacing:1px}
+.own-rating-reviews{grid-column:1/-1;border-top:1px solid var(--ln);padding-top:10px}
+.own-rating-reviews p{margin:5px 0;color:var(--mu);font-size:13px}
+.own-rating-reviews .review-stars{color:var(--ac-strong);font-size:12px;margin-left:5px}
+@media(max-width:520px){.own-rating-card{grid-template-columns:1fr}.own-rating-value{justify-items:start}}
 @media(max-width:640px){.profile-summary{align-items:flex-start;flex-direction:column}}
