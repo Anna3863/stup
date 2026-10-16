@@ -1424,8 +1424,29 @@ function authScreen(mode = 'signup') {
           const userId = data?.user?.id;
           if (userId) {
             if (!data.session) {
-              toast('Account created. Check your email to confirm it, then log in.');
-              authScreen('login');
+              const localUser = {
+                id: `local-${Date.now()}`,
+                display_name,
+                school_level,
+                county,
+                main_subject: 'Mathematics',
+                subject_ratings: {},
+                bio: '',
+                lumen_balance: DEFAULT_SESSIONS,
+                verified: false,
+                student_id_photo_url: '',
+                profile_photo_url: '',
+                password,
+                email,
+                sessions: 0
+              };
+              state.localUsers.push(localUser);
+              state.profile = { ...localUser };
+              state.people = state.localUsers.filter((person) => person.id !== localUser.id);
+              state.view = 'discover';
+              saveLocalState();
+              toast('Email confirmation is not configured, so this demo account was created locally.');
+              render();
               return;
             }
             const photoUrl = studentPhoto && studentPhoto.size ? await uploadStudentPhoto(studentPhoto) : '';
@@ -1483,7 +1504,18 @@ function authScreen(mode = 'signup') {
 
       if (configured && supabase) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        if (error) {
+          const localDemoUser = state.localUsers.find((person) => person.email === email && person.password === password);
+          if (localDemoUser) {
+            state.profile = { ...localDemoUser };
+            state.people = state.localUsers.filter((person) => person.id !== localDemoUser.id);
+            state.view = 'discover';
+            saveLocalState();
+            render();
+            return;
+          }
+          throw error;
+        }
         state.session = data.session;
         const { data: profileRow, error: profileErr } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
         if (profileErr) throw profileErr;
