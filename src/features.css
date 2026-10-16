@@ -16,9 +16,18 @@
 @media(max-width:520px){.own-rating-card{grid-template-columns:1fr}.own-rating-value{justify-items:start}}
 .avatar.has-photo{padding:0;background:transparent}
 .avatar.has-photo img{border-radius:50%}
+.brand-lockup{display:flex;align-items:center;gap:8px;flex:none}
+.brand-mark{display:block;width:52px;height:52px;object-fit:contain;transform:translateY(5px);position:relative;z-index:2;filter:drop-shadow(0 5px 5px rgba(0,0,0,.2))}
+.topinner{height:64px;min-height:64px}
+.top .brand-lockup{position:relative;height:32px;padding-left:52px}
+.top .brand-mark{position:absolute;left:0;top:-10px;transform:none}
+.top .logo{font-size:34px;letter-spacing:-1.3px}
+.auth-brand{gap:12px}
+.auth-brand .brand-mark{width:48px;height:48px}
 .presence{color:var(--mu)}
 .presence.online{color:#7edb9a}
 .inbox-back{margin-bottom:12px}
+.meeting-note{margin:10px 0 0}
 @media(max-width:640px){.inboxgrid{display:block}.inbox-contacts.mobile-hidden,.thread.mobile-hidden{display:none}.inbox-contacts,.thread{min-height:0}}
 .rating-editor-row{transition:opacity .16s,color .16s}
 .rating-editor-row.rating-disabled{opacity:.48}

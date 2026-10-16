@@ -3,6 +3,7 @@ import './style.css';
 import './profile-reviews.css';
 import './ora-search.css';
 import './features.css';
+import logoMark from './galbui.png';
 
 const SUBJECTS = ['Romanian language and literature','Mathematics','Physics','Chemistry','Biology','History','Geography','Computer science','ICT','English','French','German','Spanish','Latin','Logic','Psychology','Philosophy','Economics','Social education','Art','Music','Physical education','Religion','Technology','Natural sciences','Entrepreneurship'];
 const LEVELS = ['Middle school','High school','University'];
@@ -225,7 +226,7 @@ function shell(content) {
   const nav = state.profile ? `
     <header class="top">
       <div class="topinner">
-        <div class="logo">stup</div>
+        <div class="brand-lockup"><img class="brand-mark" src="${logoMark}" alt="" /><div class="logo">stup</div></div>
         <nav class="app-nav">
           <button class="${state.view === 'discover' ? 'active' : ''}" data-view="discover">Discover</button>
           <button class="${state.view === 'inbox' ? 'active' : ''}" data-view="inbox">Inbox</button>
@@ -1361,7 +1362,7 @@ function authScreen(mode = 'signup') {
   const signup = mode === 'signup';
   shell(`
     <section class="auth">
-      <div class="logo big">stup</div>
+      <div class="brand-lockup auth-brand"><img class="brand-mark" src="${logoMark}" alt="" /><div class="logo big">stup</div></div>
       <h1>${signup ? 'Learn from students who just got it.' : 'Welcome back.'}</h1>
       <p class="muted">Teach what you know. Ask for help when you need it.</p>
 
