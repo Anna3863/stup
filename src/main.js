@@ -1408,7 +1408,6 @@ function authScreen(mode = 'signup') {
         }
 
         if (configured && supabase) {
-          const photoUrl = studentPhoto && studentPhoto.size ? await uploadStudentPhoto(studentPhoto) : '';
           const { data, error } = await supabase.auth.signUp({
             email,
             password,
@@ -1416,8 +1415,7 @@ function authScreen(mode = 'signup') {
               data: {
                 display_name,
                 school_level,
-                county,
-                student_id_photo_url: photoUrl
+                county
               }
             }
           });
@@ -1425,6 +1423,12 @@ function authScreen(mode = 'signup') {
 
           const userId = data?.user?.id;
           if (userId) {
+            if (!data.session) {
+              toast('Account created. Check your email to confirm it, then log in.');
+              authScreen('login');
+              return;
+            }
+            const photoUrl = studentPhoto && studentPhoto.size ? await uploadStudentPhoto(studentPhoto) : '';
             const { data: profileRow, error: profileError } = await supabase.from('profiles').upsert({
               id: userId,
               display_name,
@@ -1483,7 +1487,14 @@ function authScreen(mode = 'signup') {
         state.session = data.session;
         const { data: profileRow, error: profileErr } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
         if (profileErr) throw profileErr;
-        state.profile = profileRow || { id: data.user.id, display_name: data.user.email.split('@')[0], school_level: 1, county: 'București', main_subject: 'Mathematics', subject_ratings: {}, bio: '', lumen_balance: DEFAULT_SESSIONS, verified: false, student_id_photo_url: '', profile_photo_url: '' };
+        if (profileRow) {
+          state.profile = profileRow;
+        } else {
+          const newProfile = { id: data.user.id, display_name: data.user.user_metadata?.display_name || data.user.email.split('@')[0], school_level: Number(data.user.user_metadata?.school_level ?? 1), county: data.user.user_metadata?.county || 'București', main_subject: 'Mathematics', subject_ratings: {}, bio: '', lumen_balance: DEFAULT_SESSIONS, verified: false, student_id_photo_url: null, profile_photo_url: null };
+          const { data: createdProfile, error: createProfileError } = await supabase.from('profiles').insert(newProfile).select().single();
+          if (createProfileError) throw createProfileError;
+          state.profile = createdProfile;
+        }
         state.view = 'discover';
         await fetchPeople();
         await fetchReviews();
@@ -1505,9 +1516,12 @@ function authScreen(mode = 'signup') {
       state.view = 'discover';
       saveLocalState();
       render();
-    } catch (error) {
-      toast(error.message || 'Something went wrong.');
-    }
+      } catch (error) {
+      const message = error?.message === 'Failed to fetch'
+        ? 'Could not reach Supabase. Check your internet connection and VITE_SUPABASE_URL.'
+        : error.message || 'Something went wrong.';
+      toast(message);
+      }
   });
 }
 
