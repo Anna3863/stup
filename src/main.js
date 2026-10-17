@@ -35,7 +35,8 @@ const state = {
   messageDrafts: {},
   threadShowJump: false,
   threadScrollTop: 0,
-  threadWasNearBottom: true
+  threadWasNearBottom: true,
+  threadScrollChatId: null
 };
 
 const DEFAULT_SESSIONS = 3;
@@ -994,8 +995,9 @@ function renderInbox() {
   const chats = state.chats.filter((chat) => chat.participants.includes(currentUserId));
   const activeChat = chats.find((chat) => chat.id === state.activeChatId) || chats[0] || null;
   const previousMessages = document.querySelector('.messages');
+  const openedNewThread = activeChat && state.threadScrollChatId !== activeChat.id;
   const composerWasFocused = document.activeElement?.id === 'messageInput';
-  if (previousMessages && activeChat && state.activeChatId === activeChat.id) {
+  if (previousMessages && activeChat && !openedNewThread) {
     const distanceFromBottom = previousMessages.scrollHeight - previousMessages.clientHeight - previousMessages.scrollTop;
     state.threadScrollTop = previousMessages.scrollTop;
     state.threadWasNearBottom = distanceFromBottom < 64;
@@ -1083,6 +1085,7 @@ function renderInbox() {
   } else if (activeChat && messages) {
     setTimeout(() => { messages.scrollTop = state.threadScrollTop; }, 0);
   }
+  state.threadScrollChatId = activeChat?.id || null;
 
   const messageInput = document.querySelector('#messageInput');
   if (messageInput) {
