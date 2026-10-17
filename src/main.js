@@ -31,7 +31,11 @@ const state = {
   minRating: 7,
   activeChatId: null,
   inboxListOpen: true,
-  blockedProfiles: []
+  blockedProfiles: [],
+  messageDrafts: {},
+  threadShowJump: false,
+  threadScrollTop: 0,
+  threadWasNearBottom: true
 };
 
 const DEFAULT_SESSIONS = 3;
@@ -81,6 +85,7 @@ function readLocalState() {
       : [];
     state.favorites = Array.isArray(parsed.favorites) ? parsed.favorites : [];
     state.blockedProfiles = Array.isArray(parsed.blockedProfiles) ? parsed.blockedProfiles : [];
+    state.messageDrafts = parsed.messageDrafts && typeof parsed.messageDrafts === 'object' ? parsed.messageDrafts : {};
     state.profile = parsed.profile || null;
     if (state.profile && state.profile.lumen_balance == null) state.profile.lumen_balance = DEFAULT_SESSIONS;
     state.view = parsed.view || 'discover';
@@ -102,6 +107,7 @@ function readLocalState() {
     state.chats = [];
     state.favorites = [];
     state.blockedProfiles = [];
+    state.messageDrafts = {};
     state.profile = null;
   }
 }
@@ -113,6 +119,7 @@ function saveLocalState() {
     chats: state.chats,
     favorites: state.favorites,
     blockedProfiles: state.blockedProfiles,
+    messageDrafts: state.messageDrafts,
     profile: state.profile,
     view: state.view,
     searchMode: state.searchMode,
@@ -198,6 +205,45 @@ function scrollMessagesToLatest(smooth = false) {
   }, 0);
 }
 
+const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+function messageKey(message, index) {
+  return message.id || `message-${message.createdAt || index}-${index}`;
+}
+
+function canModifyMessage(message) {
+  return message.sender === state.profile?.id
+    && message.status !== 'failed'
+    && message.createdAt
+    && Date.now() - new Date(message.createdAt).getTime() <= MESSAGE_EDIT_WINDOW_MS;
+}
+
+function messageAgeLabel(message) {
+  if (!message.createdAt) return '';
+  const remaining = Math.max(0, MESSAGE_EDIT_WINDOW_MS - (Date.now() - new Date(message.createdAt).getTime()));
+  return remaining > 0 ? ` · edit/delete ${Math.ceil(remaining / 60000)}m` : '';
+}
+
+function handleConversationQuickType(event) {
+  if (!state.profile || state.view !== 'inbox' || event.defaultPrevented) return;
+  if (event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) return;
+  if (document.querySelector('.profile-modal, .sessions-modal, [role="dialog"]')) return;
+
+  const activeElement = document.activeElement;
+  if (activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeElement.tagName)) return;
+
+  const input = document.querySelector('#messageInput');
+  if (!input || input.disabled) return;
+  event.preventDefault();
+  input.focus();
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.setRangeText(event.key, start, end, 'end');
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+document.addEventListener('keydown', handleConversationQuickType);
+
 function blockProfile(profileId) {
   if (isBlocked(profileId)) return;
   state.blockedProfiles = [...state.blockedProfiles, profileId];
@@ -277,6 +323,7 @@ function reviewForSession(chatId, reviewerId) {
 }
 
 function shell(content) {
+  document.body.style.overflow = '';
   const nav = state.profile ? `
     <header class="top">
       <div class="topinner">
@@ -451,13 +498,13 @@ async function fetchConversations() {
   const ids = memberships.map((row) => row.conversation_id);
   const [{ data: allMembers }, { data: messages }] = await Promise.all([
     supabase.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids),
-    supabase.from('messages').select('conversation_id,sender_id,body,created_at').in('conversation_id', ids).order('created_at')
+    supabase.from('messages').select('id,conversation_id,sender_id,body,created_at,edited_at,reply_to_id').in('conversation_id', ids).order('created_at')
   ]);
   state.chats = ids.map((id) => {
     const participants = (allMembers || []).filter((row) => row.conversation_id === id).map((row) => row.user_id);
     const remoteMessages = (messages || []).filter((row) => row.conversation_id === id);
     return { id, participants, status: 'active', requesterId: state.session.user.id,
-      messages: remoteMessages.map((row) => ({ sender: row.sender_id, text: row.body, createdAt: row.created_at, status: 'delivered', read: row.sender_id === state.profile.id })),
+      messages: remoteMessages.map((row) => ({ id: row.id, sender: row.sender_id, text: row.body, createdAt: row.created_at, edited: Boolean(row.edited_at), replyToId: row.reply_to_id, status: 'delivered', read: row.sender_id === state.profile.id })),
       lastUpdated: remoteMessages.at(-1)?.created_at || Date.now(),
       session: { date: '', method: 'online', completed: false } };
   });
@@ -521,7 +568,12 @@ function subscribeToMessages() {
       const row = payload.new;
       const chat = state.chats.find((entry) => entry.id === row.conversation_id);
       if (!chat || row.sender_id === state.profile.id) return;
-      chat.messages.push({ sender: row.sender_id, text: row.body, createdAt: row.created_at, status: 'delivered', read: false });
+      const visibleMessages = document.querySelector('.messages');
+      const activeAtBottom = state.view === 'inbox'
+        && state.activeChatId === chat.id
+        && visibleMessages
+        && visibleMessages.scrollHeight - visibleMessages.clientHeight - visibleMessages.scrollTop < 64;
+      chat.messages.push({ id: row.id, sender: row.sender_id, text: row.body, createdAt: row.created_at, status: 'delivered', read: activeAtBottom, replyToId: row.reply_to_id });
       chat.unreadCount = (chat.unreadCount || 0) + 1;
       chat.lastUpdated = row.created_at;
       saveLocalState();
@@ -878,6 +930,7 @@ async function startOrOpenChat(otherUserId) {
     state.activeChatId = existingChat.id;
     markChatRead(existingChat);
     state.view = 'inbox';
+    state.inboxListOpen = false;
     saveLocalState();
     render();
     return;
@@ -906,6 +959,7 @@ async function startOrOpenChat(otherUserId) {
   state.chats.unshift(newChat);
   state.activeChatId = newChat.id;
   state.view = 'inbox';
+  state.inboxListOpen = false;
   saveLocalState();
   render();
 }
@@ -915,6 +969,18 @@ function renderInbox() {
   const isMobile = window.matchMedia('(max-width: 640px)').matches;
   const chats = state.chats.filter((chat) => chat.participants.includes(currentUserId));
   const activeChat = chats.find((chat) => chat.id === state.activeChatId) || chats[0] || null;
+  const previousMessages = document.querySelector('.messages');
+  const composerWasFocused = document.activeElement?.id === 'messageInput';
+  if (previousMessages && activeChat && state.activeChatId === activeChat.id) {
+    const distanceFromBottom = previousMessages.scrollHeight - previousMessages.clientHeight - previousMessages.scrollTop;
+    state.threadScrollTop = previousMessages.scrollTop;
+    state.threadWasNearBottom = distanceFromBottom < 64;
+    state.threadShowJump = distanceFromBottom > 120;
+  } else {
+    state.threadScrollTop = 0;
+    state.threadWasNearBottom = true;
+    state.threadShowJump = false;
+  }
   if (activeChat) state.activeChatId = activeChat.id;
   const totalUnread = chats.reduce((total, chat) => total + unreadCount(chat), 0);
 
@@ -948,10 +1014,15 @@ function renderInbox() {
     </div>
   `);
 
+  if (isMobile && !state.inboxListOpen) document.body.style.overflow = 'hidden';
+
   document.querySelectorAll('[data-chat-id]').forEach((button) => {
     button.addEventListener('click', () => {
       state.activeChatId = button.dataset.chatId;
       state.inboxListOpen = false;
+      state.threadScrollTop = 0;
+      state.threadWasNearBottom = true;
+      state.threadShowJump = false;
       markChatRead(state.chats.find((chat) => chat.id === state.activeChatId));
       saveLocalState();
       renderInbox();
@@ -967,23 +1038,71 @@ function renderInbox() {
     openProfileModal(document.querySelector('[data-thread-profile]').dataset.threadProfile);
   });
 
+  const messages = document.querySelector('.messages');
   const jumpButton = document.querySelector('[data-jump-latest]');
+  const updateJumpVisibility = () => {
+    if (!messages || !jumpButton) return;
+    const distanceFromBottom = messages.scrollHeight - messages.clientHeight - messages.scrollTop;
+    state.threadShowJump = distanceFromBottom > 120;
+    jumpButton.classList.toggle('is-hidden', !state.threadShowJump);
+  };
+  messages?.addEventListener('scroll', updateJumpVisibility, { passive: true });
+
   jumpButton?.addEventListener('click', () => {
     markChatRead(activeChat);
     renderInbox();
     scrollMessagesToLatest(true);
   });
 
-  if (activeChat && !unreadCount(activeChat)) {
+  if (activeChat && state.threadWasNearBottom) {
     scrollMessagesToLatest();
+  } else if (activeChat && messages) {
+    setTimeout(() => { messages.scrollTop = state.threadScrollTop; }, 0);
   }
 
   const messageInput = document.querySelector('#messageInput');
+  if (messageInput) {
+    messageInput.value = state.messageDrafts[activeChat.id] || '';
+    if (composerWasFocused) {
+      messageInput.focus();
+      messageInput.setSelectionRange(messageInput.value.length, messageInput.value.length);
+    } else if (state.inboxListOpen === false) {
+      messageInput.focus();
+    }
+    messageInput.addEventListener('input', () => {
+      state.messageDrafts[activeChat.id] = messageInput.value;
+      saveLocalState();
+    });
+  }
   messageInput?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       sendMessage(activeChat.id);
     }
+  });
+
+  document.querySelectorAll('[data-message-more]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      const menu = event.currentTarget.parentElement.querySelector('.message-menu');
+      const isOpen = !menu.hidden;
+      menu.hidden = isOpen;
+      event.currentTarget.setAttribute('aria-expanded', String(!isOpen));
+    });
+  });
+
+  document.querySelectorAll('[data-reply-message]').forEach((button) => {
+    button.addEventListener('click', () => replyToMessage(activeChat.id, button.dataset.replyMessage));
+  });
+  document.querySelectorAll('[data-edit-message]').forEach((button) => {
+    button.addEventListener('click', () => editMessage(activeChat.id, button.dataset.editMessage));
+  });
+  document.querySelectorAll('[data-delete-message]').forEach((button) => {
+    button.addEventListener('click', () => deleteMessage(activeChat.id, button.dataset.deleteMessage));
+  });
+  document.querySelector('[data-clear-reply]')?.addEventListener('click', () => {
+    activeChat.replyTo = null;
+    saveLocalState();
+    renderInbox();
   });
 
   const acceptButton = document.querySelector('[data-accept]');
@@ -1020,23 +1139,35 @@ function renderThread(chat) {
       <div class="messages">
       ${(chat.messages || []).map((message) => {
         const mine = message.sender === currentUserId;
+        const index = chat.messages.indexOf(message);
+        const key = messageKey(message, index);
+        const editable = canModifyMessage(message);
         const receipt = mine ? (message.status === 'failed' ? '<span class="message-receipt failed">Failed to send</span>' : `<span class="message-receipt">${message.status === 'read' ? 'Read' : message.status === 'delivered' ? 'Delivered' : 'Sent'}</span>`) : '';
         return `
-          <div class="bubble ${mine ? 'mine' : ''} ${message.status === 'failed' ? 'failed' : ''}">
+          <div class="bubble ${mine ? 'mine' : ''} ${message.status === 'failed' ? 'failed' : ''}" data-message-key="${escapeHtml(key)}">
+            ${message.replyToText ? `<div class="reply-quote">${escapeHtml(message.replyToText)}</div>` : ''}
             <p>${messageMarkup(message.text)}</p>
-            <small>${mine ? 'You' : escapeHtml(partner?.display_name || 'Them')} ${receipt}</small>
+            <small>${mine ? 'You' : escapeHtml(partner?.display_name || 'Them')}${message.edited ? ' · edited' : ''} ${receipt}</small>
+            <div class="message-actions">
+              <button class="message-more" type="button" data-message-more aria-expanded="false" aria-label="Message actions">⋯</button>
+              <div class="message-menu" hidden>
+                <button type="button" data-reply-message="${escapeHtml(key)}">Reply</button>
+                ${editable ? `<button type="button" data-edit-message="${escapeHtml(key)}">Edit</button><button type="button" data-delete-message="${escapeHtml(key)}">Delete</button>` : ''}
+              </div>
+            </div>
           </div>
         `;
       }).join('') || '<div class="emptyline">No messages yet.</div>'}
       </div>
-      ${unreadCount(chat) ? `<button class="jump-latest" type="button" data-jump-latest aria-label="Jump to latest messages"><span aria-hidden="true">↓</span><b>${unreadCount(chat)} new</b></button>` : '<button class="jump-latest is-hidden" type="button" data-jump-latest aria-label="Jump to latest message"><span aria-hidden="true">↓</span></button>'}
+      <button class="jump-latest ${state.threadShowJump ? '' : 'is-hidden'}" type="button" data-jump-latest aria-label="Jump to latest message"><span aria-hidden="true">↓</span>${unreadCount(chat) ? `<b>${unreadCount(chat)} new</b>` : ''}</button>
     </div>
   `;
 
   if (chat.status === 'active') {
     body += `
+      ${chat.replyTo ? `<div class="reply-composer"><span><b>Replying to ${escapeHtml(chat.replyTo.senderName || 'student')}</b><br />${escapeHtml(chat.replyTo.text)}</span><button type="button" data-clear-reply aria-label="Cancel reply">×</button></div>` : ''}
       <div class="sendform ${isBlocked(partner?.id) ? 'blocked-sendform' : ''}">
-        <textarea id="messageInput" rows="1" placeholder="Write a message…" aria-label="Write a message"></textarea>
+        <textarea id="messageInput" rows="1" placeholder="Write a message…" aria-label="Write a message" autofocus></textarea>
         <button class="btn" data-send ${isBlocked(partner?.id) ? 'disabled' : ''}>Send</button>
       </div>
       ${isBlocked(partner?.id) ? '<p class="send-error">You blocked this student. Messages will fail to send.</p>' : ''}
@@ -1084,6 +1215,67 @@ function declineChat(chatId) {
   render();
 }
 
+function findChatMessage(chat, key) {
+  return (chat?.messages || []).find((message, index) => messageKey(message, index) === key);
+}
+
+function findChatMessageIndex(chat, key) {
+  return (chat?.messages || []).findIndex((message, index) => messageKey(message, index) === key);
+}
+
+function replyToMessage(chatId, key) {
+  const chat = state.chats.find((entry) => entry.id === chatId);
+  const message = findChatMessage(chat, key);
+  if (!chat || !message) return;
+  chat.replyTo = {
+    id: message.id || null,
+    text: message.text,
+    senderName: message.sender === state.profile.id ? 'you' : (getPersonById(message.sender)?.display_name || 'student')
+  };
+  saveLocalState();
+  renderInbox();
+  document.querySelector('#messageInput')?.focus();
+}
+
+async function editMessage(chatId, key) {
+  const chat = state.chats.find((entry) => entry.id === chatId);
+  const message = findChatMessage(chat, key);
+  if (!chat || !message || !canModifyMessage(message)) return;
+  const updatedText = window.prompt('Edit your message:', message.text)?.trim();
+  if (!updatedText || updatedText === message.text) return;
+  if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-') && message.id) {
+    let { error } = await supabase.from('messages').update({ body: updatedText, edited_at: new Date().toISOString() }).eq('id', message.id).eq('sender_id', state.profile.id);
+    if (error && /edited_at|column/i.test(error.message || '')) {
+      ({ error } = await supabase.from('messages').update({ body: updatedText }).eq('id', message.id).eq('sender_id', state.profile.id));
+    }
+    if (error) {
+      toast('Could not edit this hosted message. Run migration_message_controls.sql in Supabase first.');
+      return;
+    }
+  }
+  message.text = updatedText;
+  message.edited = true;
+  saveLocalState();
+  renderInbox();
+}
+
+async function deleteMessage(chatId, key) {
+  const chat = state.chats.find((entry) => entry.id === chatId);
+  const index = findChatMessageIndex(chat, key);
+  const message = index >= 0 ? chat.messages[index] : null;
+  if (!chat || !message || !canModifyMessage(message) || !window.confirm('Delete this message?')) return;
+  if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-') && message.id) {
+    const { error } = await supabase.from('messages').delete().eq('id', message.id).eq('sender_id', state.profile.id);
+    if (error) {
+      toast(error.message || 'Could not delete the message.');
+      return;
+    }
+  }
+  chat.messages.splice(index, 1);
+  saveLocalState();
+  renderInbox();
+}
+
 async function sendMessage(chatId) {
   const input = document.querySelector('#messageInput');
   const chat = state.chats.find((entry) => entry.id === chatId);
@@ -1102,14 +1294,40 @@ async function sendMessage(chatId) {
     toast('Message blocked. Keep the conversation respectful.');
     return;
   }
+  const localMessageId = crypto.randomUUID();
+  const localCreatedAt = new Date().toISOString();
+  const replyToId = chat.replyTo?.id || null;
+  let remoteMessageId = '';
+  let remoteCreatedAt = '';
   if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-')) {
-    const { error } = await supabase.from('messages').insert({ conversation_id: chatId, sender_id: state.profile.id, body: text });
+    const messagePayload = { conversation_id: chatId, sender_id: state.profile.id, body: text };
+    if (replyToId) messagePayload.reply_to_id = replyToId;
+    let { data, error } = await supabase.from('messages').insert(messagePayload).select('id,created_at').single();
+    if (error && /reply_to_id|column/i.test(error.message || '')) {
+      ({ data, error } = await supabase.from('messages').insert({ conversation_id: chatId, sender_id: state.profile.id, body: text }).select('id,created_at').single());
+    }
     if (error) {
       toast(error.message || 'Could not send your message.');
       return;
     }
+    if (data?.id) {
+      remoteMessageId = data.id;
+      remoteCreatedAt = data.created_at;
+    }
   }
-  chat.messages.push({ sender: state.profile.id, text, status: 'delivered', createdAt: new Date().toISOString() });
+  const message = {
+    id: remoteMessageId || localMessageId,
+    sender: state.profile.id,
+    text,
+    status: 'delivered',
+    createdAt: remoteCreatedAt || localCreatedAt,
+    read: false,
+    replyToId: chat.replyTo?.id || null,
+    replyToText: chat.replyTo?.text || ''
+  };
+  chat.messages.push(message);
+  chat.replyTo = null;
+  delete state.messageDrafts[chatId];
   chat.lastUpdated = Date.now();
   saveLocalState();
   render();

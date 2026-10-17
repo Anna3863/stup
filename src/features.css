@@ -48,6 +48,19 @@
 .message-receipt{margin-left:5px;opacity:.8}
 .message-receipt.failed,.send-error{color:#ff9b7f}
 .bubble.failed{border:1px solid rgba(255,155,127,.5)}
+.message-actions{position:absolute;top:5px;right:6px;opacity:0;transition:opacity .15s}
+.bubble{position:relative}
+.bubble:hover .message-actions,.bubble:focus-within .message-actions{opacity:1}
+.message-more{border:0;padding:0 3px;background:transparent;color:var(--mu);font-size:17px;line-height:12px}
+.message-more:hover,.message-more:focus-visible{color:var(--tx)}
+.message-menu{position:absolute;right:0;top:18px;z-index:3;display:grid;min-width:90px;padding:4px;border:1px solid var(--ln);border-radius:8px;background:var(--card);box-shadow:0 8px 20px rgba(0,0,0,.3)}
+.message-menu[hidden]{display:none}
+.message-menu button{border:0;border-radius:5px;padding:6px 8px;background:transparent;color:var(--tx);text-align:left;font-size:11px;white-space:nowrap}
+.message-menu button:hover,.message-menu button:focus-visible{background:var(--bg-soft)}
+.reply-quote{margin-bottom:7px;padding:6px 8px;border-left:2px solid var(--ac-strong);border-radius:4px;background:rgba(255,255,255,.08);font-size:11px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reply-composer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px;padding:8px 10px;border-left:2px solid var(--ac-strong);border-radius:7px;background:var(--bg-soft);font-size:12px}
+.reply-composer span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reply-composer button{border:0;background:transparent;color:var(--mu);font-size:18px;line-height:1;padding:0}
 .blocked-sendform input,.blocked-sendform button{opacity:.55}
 .send-error{margin:7px 0 0;font-size:12px}
 .sendform textarea{flex:1;min-height:42px;max-height:130px;resize:vertical;margin:0}
