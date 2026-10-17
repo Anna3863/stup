@@ -79,7 +79,7 @@ function readLocalState() {
         messages: Array.isArray(chat.messages) ? chat.messages.map((message) => ({
           ...message,
           read: message.read ?? true,
-          status: message.status || 'delivered'
+          status: message.sender === parsed.profile?.id && message.status === 'read' ? 'delivered' : (message.status || 'delivered')
         })) : []
       }))
       : [];
@@ -188,11 +188,19 @@ function unreadCount(chat, currentUserId = state.profile?.id) {
 function markChatRead(chat) {
   if (!chat) return;
   (chat.messages || []).forEach((message) => {
-    message.read = true;
-    if (message.sender === state.profile.id && message.status !== 'failed') message.status = 'read';
+    if (message.sender !== state.profile.id) message.read = true;
   });
   chat.unreadCount = 0;
   saveLocalState();
+  if (configured && supabase && state.session?.user && !String(chat.id).startsWith('chat-')) {
+    supabase.from('conversation_members')
+      .update({ last_read_at: new Date().toISOString() })
+      .eq('conversation_id', chat.id)
+      .eq('user_id', state.profile.id)
+      .then(({ error }) => {
+        if (error && !/last_read_at|column/i.test(error.message || '')) toast(error.message || 'Could not update read status.');
+      });
+  }
 }
 
 function scrollMessagesToLatest(smooth = false) {
@@ -496,7 +504,10 @@ async function fetchConversations() {
     .select('conversation_id,user_id').eq('user_id', state.session.user.id);
   if (error || !memberships?.length) return;
   const ids = memberships.map((row) => row.conversation_id);
-  const { data: allMembers } = await supabase.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids);
+  let { data: allMembers, error: membersError } = await supabase.from('conversation_members').select('conversation_id,user_id,last_read_at').in('conversation_id', ids);
+  if (membersError && /last_read_at|column/i.test(membersError.message || '')) {
+    ({ data: allMembers } = await supabase.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids));
+  }
   let { data: messages, error: messagesError } = await supabase.from('messages')
     .select('id,conversation_id,sender_id,body,created_at,edited_at,reply_to_id')
     .in('conversation_id', ids)
@@ -510,8 +521,14 @@ async function fetchConversations() {
   state.chats = ids.map((id) => {
     const participants = (allMembers || []).filter((row) => row.conversation_id === id).map((row) => row.user_id);
     const remoteMessages = (messages || []).filter((row) => row.conversation_id === id);
+    const partnerId = participants.find((participantId) => participantId !== state.profile.id);
+    const partnerReadAt = (allMembers || []).find((row) => row.conversation_id === id && row.user_id === partnerId)?.last_read_at;
     return { id, participants, status: 'active', requesterId: state.session.user.id,
-      messages: remoteMessages.map((row) => ({ id: row.id, sender: row.sender_id, text: row.body, createdAt: row.created_at, edited: Boolean(row.edited_at), replyToId: row.reply_to_id, status: 'delivered', read: row.sender_id === state.profile.id })),
+      messages: remoteMessages.map((row) => {
+        const isMine = row.sender_id === state.profile.id;
+        const partnerHasRead = Boolean(isMine && partnerReadAt && new Date(partnerReadAt).getTime() >= new Date(row.created_at).getTime());
+        return { id: row.id, sender: row.sender_id, text: row.body, createdAt: row.created_at, edited: Boolean(row.edited_at), replyToId: row.reply_to_id, status: partnerHasRead ? 'read' : 'delivered', read: !isMine };
+      }),
       lastUpdated: remoteMessages.at(-1)?.created_at || Date.now(),
       session: { date: '', method: 'online', completed: false } };
   });
