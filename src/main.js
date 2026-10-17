@@ -748,8 +748,8 @@ function openProfileModal(personId) {
           <div class="profile-menu" data-profile-menu hidden>
             <button type="button" data-profile-favorite>${isFavorite(person.id) ? '♥ Remove favorite' : '♡ Add to favorites'}</button>
             <button type="button" data-profile-message>Message</button>
-            <button type="button" data-profile-report>Report</button>
-            <button type="button" class="danger-action" data-profile-block>${isBlocked(person.id) ? 'Unblock' : 'Block'}</button>
+            <button type="button" class="danger-action" data-profile-report>Report</button>
+            <button type="button" data-profile-block>${isBlocked(person.id) ? 'Unblock' : 'Block'}</button>
           </div>
         </div>
       </div>
@@ -947,6 +947,14 @@ function renderInbox() {
     });
   }
 
+  const messageInput = document.querySelector('#messageInput');
+  messageInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage(activeChat.id);
+    }
+  });
+
   const acceptButton = document.querySelector('[data-accept]');
   const declineButton = document.querySelector('[data-decline]');
   const sendButton = document.querySelector('[data-send]');
@@ -995,7 +1003,7 @@ function renderThread(chat) {
   if (chat.status === 'active') {
     body += `
       <div class="sendform ${isBlocked(partner?.id) ? 'blocked-sendform' : ''}">
-        <input id="messageInput" placeholder="Write a message…" />
+        <textarea id="messageInput" rows="1" placeholder="Write a message…" aria-label="Write a message"></textarea>
         <button class="btn" data-send ${isBlocked(partner?.id) ? 'disabled' : ''}>Send</button>
       </div>
       ${isBlocked(partner?.id) ? '<p class="send-error">You blocked this student. Messages will fail to send.</p>' : ''}

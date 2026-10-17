@@ -44,6 +44,7 @@
 .bubble.failed{border:1px solid rgba(255,155,127,.5)}
 .blocked-sendform input,.blocked-sendform button{opacity:.55}
 .send-error{margin:7px 0 0;font-size:12px}
+.sendform textarea{flex:1;min-height:42px;max-height:130px;resize:vertical;margin:0}
 .profile-menu-wrap{position:relative;margin-left:auto;align-self:flex-start}
 .profile-more{width:32px;height:32px;border:1px solid var(--ln);border-radius:50%;background:transparent;color:var(--tx);font-size:22px;line-height:18px}
 .profile-more:hover,.profile-more:focus-visible{background:var(--bg-soft)}
