@@ -30,10 +30,16 @@ const state = {
   filterSubject: 'Mathematics',
   minRating: 7,
   activeChatId: null,
-  inboxListOpen: true
+  inboxListOpen: true,
+  blockedProfiles: []
 };
 
 const DEFAULT_SESSIONS = 3;
+const SESSION_OFFERS = [
+  { sessions: 5, price: '€4.99', label: 'Starter', description: 'A few extra sessions for your next study sprint.' },
+  { sessions: 15, price: '€12.99', label: 'Popular', description: 'The best balance for regular learning and teaching.' },
+  { sessions: 40, price: '€29.99', label: 'Power pack', description: 'Keep a generous balance for the whole term.' }
+];
 const BLOCKED_COMMENT_WORDS = /(?:idiot|stupid|hate you|prost|tâmpit|fuck|shit)/i;
 
 function escapeHtml(value = '') {
@@ -66,6 +72,7 @@ function readLocalState() {
       ? parsed.chats.map((chat) => ({ ...chat, status: chat.status === 'declined' ? 'declined' : 'active' }))
       : [];
     state.favorites = Array.isArray(parsed.favorites) ? parsed.favorites : [];
+    state.blockedProfiles = Array.isArray(parsed.blockedProfiles) ? parsed.blockedProfiles : [];
     state.profile = parsed.profile || null;
     if (state.profile && state.profile.lumen_balance == null) state.profile.lumen_balance = DEFAULT_SESSIONS;
     state.view = parsed.view || 'discover';
@@ -86,6 +93,7 @@ function readLocalState() {
     state.reviews = [];
     state.chats = [];
     state.favorites = [];
+    state.blockedProfiles = [];
     state.profile = null;
   }
 }
@@ -96,6 +104,7 @@ function saveLocalState() {
     reviews: state.reviews,
     chats: state.chats,
     favorites: state.favorites,
+    blockedProfiles: state.blockedProfiles,
     profile: state.profile,
     view: state.view,
     searchMode: state.searchMode,
@@ -151,6 +160,32 @@ function getPersonById(id) {
 
 function isFavorite(profileId) {
   return state.favorites.includes(profileId);
+}
+
+function isBlocked(profileId) {
+  return state.blockedProfiles.includes(profileId);
+}
+
+function unreadCount(chat, currentUserId = state.profile?.id) {
+  return (chat.messages || []).filter((message) => message.sender !== currentUserId && !message.read).length;
+}
+
+function markChatRead(chat) {
+  if (!chat) return;
+  (chat.messages || []).forEach((message) => {
+    if (message.sender !== state.profile.id) message.read = true;
+  });
+  chat.unreadCount = 0;
+  saveLocalState();
+}
+
+function blockProfile(profileId) {
+  if (isBlocked(profileId)) return;
+  state.blockedProfiles = [...state.blockedProfiles, profileId];
+  const chat = state.chats.find((entry) => entry.participants.includes(profileId) && entry.participants.includes(state.profile.id));
+  if (chat) chat.blocked = true;
+  saveLocalState();
+  toast('Student blocked. Messages can no longer be sent.');
 }
 
 async function toggleFavorite(profileId) {
@@ -232,7 +267,7 @@ function shell(content) {
           <button class="${state.view === 'inbox' ? 'active' : ''}" data-view="inbox">Inbox</button>
           <button class="${state.view === 'settings' ? 'active' : ''}" data-view="settings">Settings</button>
         </nav>
-        <span class="credit" title="Sessions are your available session balance">✦ ${sessionBalance()} Sessions</span>
+        <button class="credit sessions-trigger" type="button" data-sessions-open aria-haspopup="dialog" aria-label="View session balance and offers">✦ ${sessionBalance()} Sessions</button>
       </div>
     </header>
   ` : '';
@@ -247,6 +282,65 @@ function shell(content) {
       render();
     });
   });
+
+  document.querySelector('[data-sessions-open]')?.addEventListener('click', openSessionsModal);
+}
+
+function openSessionsModal() {
+  if (document.querySelector('[data-sessions-modal]')) return;
+
+  const modal = document.createElement('div');
+  modal.className = 'sessions-modal';
+  modal.dataset.sessionsModal = 'true';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'sessions-title');
+  modal.innerHTML = `
+    <section class="sessions-panel">
+      <div class="sessions-heading">
+        <div>
+          <span class="eyebrow">Your learning balance</span>
+          <h2 id="sessions-title">${sessionBalance()} Sessions</h2>
+        </div>
+        <button class="modal-close" type="button" data-sessions-close aria-label="Close sessions information"><span aria-hidden="true">×</span></button>
+      </div>
+      <div class="sessions-explainer">
+        <strong>What are sessions?</strong>
+        <p>Sessions are credits for booking time with another student. Use 1 session when you ask for help. When you teach someone and complete the session, you earn 1 back.</p>
+        <p class="muted small">You start with ${DEFAULT_SESSIONS} sessions. You can earn more by teaching or add to your balance with a pack below.</p>
+      </div>
+      <div class="session-offers">
+        ${SESSION_OFFERS.map((offer, index) => `
+          <article class="session-offer ${index === 1 ? 'featured' : ''}">
+            ${index === 1 ? '<span class="offer-badge">Best value</span>' : ''}
+            <div class="offer-topline"><strong>${offer.label}</strong><span>${offer.price}</span></div>
+            <div class="offer-count">${offer.sessions} <small>sessions</small></div>
+            <p class="muted small">${offer.description}</p>
+            <button class="btn ${index === 1 ? '' : 'secondary'}" type="button" data-buy-sessions="${offer.sessions}">Buy pack</button>
+          </article>
+        `).join('')}
+      </div>
+      <p class="muted small sessions-footnote">Secure checkout will be available soon. Teaching remains free.</p>
+    </section>
+  `;
+  document.body.appendChild(modal);
+
+  const onKeyDown = (event) => {
+    if (event.key === 'Escape') close();
+  };
+  const close = () => {
+    modal.remove();
+    document.removeEventListener('keydown', onKeyDown);
+  };
+  modal.querySelector('[data-sessions-close]').addEventListener('click', close);
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) close();
+  });
+  modal.querySelectorAll('[data-buy-sessions]').forEach((button) => {
+    button.addEventListener('click', () => toast('Checkout is coming soon — you can earn sessions by teaching in the meantime.'));
+  });
+  document.addEventListener('keydown', onKeyDown);
+  modal.querySelector('[data-sessions-close]').focus();
 }
 
 function readDataUrl(file) {
@@ -344,7 +438,7 @@ async function fetchConversations() {
     const participants = (allMembers || []).filter((row) => row.conversation_id === id).map((row) => row.user_id);
     const remoteMessages = (messages || []).filter((row) => row.conversation_id === id);
     return { id, participants, status: 'active', requesterId: state.session.user.id,
-      messages: remoteMessages.map((row) => ({ sender: row.sender_id, text: row.body })),
+      messages: remoteMessages.map((row) => ({ sender: row.sender_id, text: row.body, createdAt: row.created_at, status: row.sender_id === state.profile.id ? 'delivered' : 'delivered' })),
       lastUpdated: remoteMessages.at(-1)?.created_at || Date.now(),
       session: { date: '', method: 'online', completed: false } };
   });
@@ -408,7 +502,8 @@ function subscribeToMessages() {
       const row = payload.new;
       const chat = state.chats.find((entry) => entry.id === row.conversation_id);
       if (!chat || row.sender_id === state.profile.id) return;
-      chat.messages.push({ sender: row.sender_id, text: row.body });
+      chat.messages.push({ sender: row.sender_id, text: row.body, createdAt: row.created_at, status: 'delivered', read: false });
+      chat.unreadCount = (chat.unreadCount || 0) + 1;
       chat.lastUpdated = row.created_at;
       saveLocalState();
       if (state.view === 'inbox') renderInbox();
@@ -648,6 +743,15 @@ function openProfileModal(personId) {
           <b id="profile-title">${escapeHtml(person.display_name)}</b>
           <small>${escapeHtml(levelName(person.school_level))} · ${escapeHtml(person.county)}</small>
         </div>
+        <div class="profile-menu-wrap">
+          <button class="profile-more" type="button" data-profile-more aria-expanded="false" aria-label="More actions for ${escapeHtml(person.display_name)}">⋯</button>
+          <div class="profile-menu" data-profile-menu hidden>
+            <button type="button" data-profile-favorite>${isFavorite(person.id) ? '♥ Remove favorite' : '♡ Add to favorites'}</button>
+            <button type="button" data-profile-message>Message</button>
+            <button type="button" data-profile-report>Report</button>
+            <button type="button" class="danger-action" data-profile-block>${isBlocked(person.id) ? 'Unblock' : 'Block'}</button>
+          </div>
+        </div>
       </div>
       <p>${escapeHtml(person.bio || 'No bio added yet.')}</p>
       ${person.verified ? '<span class="tag">Verified student</span>' : '<span class="muted small">Student ID pending verification</span>'}
@@ -683,9 +787,6 @@ function openProfileModal(personId) {
         `;
       })()}
       <div class="row">
-        <button class="btn secondary favorite-button ${isFavorite(person.id) ? 'is-favorite' : ''}" data-profile-favorite>${isFavorite(person.id) ? '♥ Saved' : '♡ Favorite'}</button>
-        <button class="btn" data-profile-message>Message</button>
-        <button class="btn secondary" data-profile-report>Report</button>
         <button class="btn secondary" data-profile-close>Close</button>
       </div>
     </section>
@@ -717,6 +818,24 @@ function openProfileModal(personId) {
     close();
   });
   modal.querySelector('[data-profile-report]').addEventListener('click', () => openReportModal(personId));
+  modal.querySelector('[data-profile-more]').addEventListener('click', (event) => {
+    const menu = modal.querySelector('[data-profile-menu]');
+    const isOpen = !menu.hidden;
+    menu.hidden = isOpen;
+    event.currentTarget.setAttribute('aria-expanded', String(!isOpen));
+  });
+  modal.querySelector('[data-profile-block]').addEventListener('click', () => {
+    if (isBlocked(personId)) {
+      state.blockedProfiles = state.blockedProfiles.filter((id) => id !== personId);
+      saveLocalState();
+      toast('Student unblocked.');
+    } else if (window.confirm('Block this student? You will not be able to send them messages.')) {
+      blockProfile(personId);
+    } else {
+      return;
+    }
+    close();
+  });
 }
 
 async function startOrOpenChat(otherUserId) {
@@ -724,6 +843,7 @@ async function startOrOpenChat(otherUserId) {
   const existingChat = state.chats.find((chat) => chat.participants.includes(currentId) && chat.participants.includes(otherUserId));
   if (existingChat) {
     state.activeChatId = existingChat.id;
+    markChatRead(existingChat);
     state.view = 'inbox';
     saveLocalState();
     render();
@@ -763,11 +883,16 @@ function renderInbox() {
   const chats = state.chats.filter((chat) => chat.participants.includes(currentUserId));
   const activeChat = chats.find((chat) => chat.id === state.activeChatId) || chats[0] || null;
   if (activeChat) state.activeChatId = activeChat.id;
+  const totalUnread = chats.reduce((total, chat) => total + unreadCount(chat), 0);
 
   shell(`
     <div class="inboxgrid">
       <section class="card inbox-contacts ${isMobile && !state.inboxListOpen ? 'mobile-hidden' : ''}">
-        <h2>Inbox</h2>
+        <div class="inbox-heading">
+          <span class="inbox-heading-icon" aria-hidden="true">✉</span>
+          <h2>Inbox</h2>
+          ${totalUnread ? `<span class="unread-count">${totalUnread > 99 ? '99+' : totalUnread}</span>` : ''}
+        </div>
         ${chats.length ? chats.map((chat) => {
           const partnerId = chat.participants.find((personId) => personId !== currentUserId);
           const partner = getPersonById(partnerId);
@@ -776,7 +901,7 @@ function renderInbox() {
               ${avatarMarkup(partner, 'small-avatar')}
               <span>
                 <b>${escapeHtml(partner?.display_name || 'Student')}</b>
-              <small>${isPersonActive(partnerId) ? 'Active now' : 'Offline'}</small>
+              <small>${isPersonActive(partnerId) ? 'Active now' : 'Offline'}${unreadCount(chat) ? ` · <strong class="chat-unread">${unreadCount(chat)} new</strong>` : ''}</small>
               </span>
             </button>
           `;
@@ -794,6 +919,7 @@ function renderInbox() {
     button.addEventListener('click', () => {
       state.activeChatId = button.dataset.chatId;
       state.inboxListOpen = false;
+      markChatRead(state.chats.find((chat) => chat.id === state.activeChatId));
       saveLocalState();
       renderInbox();
     });
@@ -803,6 +929,23 @@ function renderInbox() {
     state.inboxListOpen = true;
     renderInbox();
   });
+
+  const jumpButton = document.querySelector('[data-jump-latest]');
+  jumpButton?.addEventListener('click', () => {
+    markChatRead(activeChat);
+    renderInbox();
+    requestAnimationFrame(() => {
+      const messages = document.querySelector('.messages');
+      if (messages) messages.scrollTop = messages.scrollHeight;
+    });
+  });
+
+  if (activeChat && !unreadCount(activeChat)) {
+    requestAnimationFrame(() => {
+      const messages = document.querySelector('.messages');
+      if (messages) messages.scrollTop = messages.scrollHeight;
+    });
+  }
 
   const acceptButton = document.querySelector('[data-accept]');
   const declineButton = document.querySelector('[data-decline]');
@@ -832,25 +975,30 @@ function renderThread(chat) {
       </div>
     </div>
 
-    <div class="messages">
+    <div class="messages-wrap">
+      <div class="messages">
       ${(chat.messages || []).map((message) => {
         const mine = message.sender === currentUserId;
+        const receipt = mine ? (message.status === 'failed' ? '<span class="message-receipt failed">Failed to send</span>' : `<span class="message-receipt">${message.status === 'read' ? 'Read' : message.status === 'delivered' ? 'Delivered' : 'Sent'}</span>`) : '';
         return `
-          <div class="bubble ${mine ? 'mine' : ''}">
+          <div class="bubble ${mine ? 'mine' : ''} ${message.status === 'failed' ? 'failed' : ''}">
             <p>${messageMarkup(message.text)}</p>
-            <small>${mine ? 'You' : escapeHtml(partner?.display_name || 'Them')}</small>
+            <small>${mine ? 'You' : escapeHtml(partner?.display_name || 'Them')} ${receipt}</small>
           </div>
         `;
       }).join('') || '<div class="emptyline">No messages yet.</div>'}
+      </div>
+      ${unreadCount(chat) ? `<button class="jump-latest" type="button" data-jump-latest aria-label="Jump to latest messages"><span aria-hidden="true">↓</span><b>${unreadCount(chat)} new</b></button>` : '<button class="jump-latest is-hidden" type="button" data-jump-latest aria-label="Jump to latest message"><span aria-hidden="true">↓</span></button>'}
     </div>
   `;
 
   if (chat.status === 'active') {
     body += `
-      <div class="sendform">
+      <div class="sendform ${isBlocked(partner?.id) ? 'blocked-sendform' : ''}">
         <input id="messageInput" placeholder="Write a message…" />
-        <button class="btn" data-send>Send</button>
+        <button class="btn" data-send ${isBlocked(partner?.id) ? 'disabled' : ''}>Send</button>
       </div>
+      ${isBlocked(partner?.id) ? '<p class="send-error">You blocked this student. Messages will fail to send.</p>' : ''}
       ${chat.session && chat.session.date ? `
         <div class="notice">
           <strong>${chat.session.completed ? 'Session completed:' : 'Session booked:'}</strong> ${escapeHtml(chat.session.date)} · ${escapeHtml(chat.session.method)}
@@ -901,6 +1049,14 @@ async function sendMessage(chatId) {
   if (!chat || !input) return;
   const text = input.value.trim();
   if (!text) return;
+  const partnerId = chat.participants.find((personId) => personId !== state.profile.id);
+  if (isBlocked(partnerId)) {
+    chat.messages.push({ sender: state.profile.id, text, status: 'failed', createdAt: new Date().toISOString() });
+    chat.lastUpdated = Date.now();
+    saveLocalState();
+    renderInbox();
+    return;
+  }
   if (BLOCKED_COMMENT_WORDS.test(text)) {
     toast('Message blocked. Keep the conversation respectful.');
     return;
@@ -912,7 +1068,7 @@ async function sendMessage(chatId) {
       return;
     }
   }
-  chat.messages.push({ sender: state.profile.id, text });
+  chat.messages.push({ sender: state.profile.id, text, status: 'delivered', createdAt: new Date().toISOString() });
   chat.lastUpdated = Date.now();
   saveLocalState();
   render();
@@ -1159,10 +1315,6 @@ function renderSettings() {
         ${ownReviews.length ? `<div class="own-rating-reviews">${ownReviews.slice(0, 3).map((review) => `<p>“${escapeHtml(review.comment || 'Session rating')}” <span class="review-stars">${'★'.repeat(review.rating)}</span></p>`).join('')}</div>` : ''}
       </div>
       <div class="card form">
-        <div class="profile-summary">
-          <strong>✦ ${sessionBalance()} Sessions</strong>
-          <span class="muted small">Spend 1 session credit to book. Teaching earns it back.</span>
-        </div>
         <div class="profile-photo-setting">
           ${avatarMarkup(state.profile, 'profile-photo-preview')}
           <label for="profile-photo">Profile picture</label>
