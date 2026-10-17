@@ -61,6 +61,7 @@
 .reply-composer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px;padding:8px 10px;border-left:2px solid var(--ac-strong);border-radius:7px;background:var(--bg-soft);font-size:12px}
 .reply-composer span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .reply-composer button{border:0;background:transparent;color:var(--mu);font-size:18px;line-height:1;padding:0}
+.edit-composer{border-left-color:var(--ac)}
 .blocked-sendform input,.blocked-sendform button{opacity:.55}
 .send-error{margin:7px 0 0;font-size:12px}
 .sendform textarea{flex:1;min-height:42px;max-height:130px;resize:vertical;margin:0}

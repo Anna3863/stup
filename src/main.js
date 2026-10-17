@@ -496,10 +496,17 @@ async function fetchConversations() {
     .select('conversation_id,user_id').eq('user_id', state.session.user.id);
   if (error || !memberships?.length) return;
   const ids = memberships.map((row) => row.conversation_id);
-  const [{ data: allMembers }, { data: messages }] = await Promise.all([
-    supabase.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids),
-    supabase.from('messages').select('id,conversation_id,sender_id,body,created_at,edited_at,reply_to_id').in('conversation_id', ids).order('created_at')
-  ]);
+  const { data: allMembers } = await supabase.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids);
+  let { data: messages, error: messagesError } = await supabase.from('messages')
+    .select('id,conversation_id,sender_id,body,created_at,edited_at,reply_to_id')
+    .in('conversation_id', ids)
+    .order('created_at');
+  if (messagesError && /edited_at|reply_to_id|column/i.test(messagesError.message || '')) {
+    ({ data: messages } = await supabase.from('messages')
+      .select('id,conversation_id,sender_id,body,created_at')
+      .in('conversation_id', ids)
+      .order('created_at'));
+  }
   state.chats = ids.map((id) => {
     const participants = (allMembers || []).filter((row) => row.conversation_id === id).map((row) => row.user_id);
     const remoteMessages = (messages || []).filter((row) => row.conversation_id === id);
@@ -1077,7 +1084,8 @@ function renderInbox() {
   messageInput?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      sendMessage(activeChat.id);
+      if (activeChat.editingMessageKey) saveEditedMessage(activeChat.id);
+      else sendMessage(activeChat.id);
     }
   });
 
@@ -1094,13 +1102,19 @@ function renderInbox() {
     button.addEventListener('click', () => replyToMessage(activeChat.id, button.dataset.replyMessage));
   });
   document.querySelectorAll('[data-edit-message]').forEach((button) => {
-    button.addEventListener('click', () => editMessage(activeChat.id, button.dataset.editMessage));
+    button.addEventListener('click', () => beginEditMessage(activeChat.id, button.dataset.editMessage));
   });
   document.querySelectorAll('[data-delete-message]').forEach((button) => {
     button.addEventListener('click', () => deleteMessage(activeChat.id, button.dataset.deleteMessage));
   });
   document.querySelector('[data-clear-reply]')?.addEventListener('click', () => {
     activeChat.replyTo = null;
+    saveLocalState();
+    renderInbox();
+  });
+  document.querySelector('[data-cancel-edit]')?.addEventListener('click', () => {
+    activeChat.editingMessageKey = null;
+    delete state.messageDrafts[activeChat.id];
     saveLocalState();
     renderInbox();
   });
@@ -1114,7 +1128,7 @@ function renderInbox() {
 
   if (acceptButton) acceptButton.addEventListener('click', () => acceptChat(activeChat.id));
   if (declineButton) declineButton.addEventListener('click', () => declineChat(activeChat.id));
-  if (sendButton) sendButton.addEventListener('click', () => sendMessage(activeChat.id));
+  if (sendButton) sendButton.addEventListener('click', () => activeChat.editingMessageKey ? saveEditedMessage(activeChat.id) : sendMessage(activeChat.id));
   if (finishButton) finishButton.addEventListener('click', () => completeSession(activeChat.id));
   if (rateButton) rateButton.addEventListener('click', () => openReviewModal(activeChat.id));
   if (meetButton) meetButton.addEventListener('click', () => openMeetLink(activeChat.id));
@@ -1165,10 +1179,10 @@ function renderThread(chat) {
 
   if (chat.status === 'active') {
     body += `
-      ${chat.replyTo ? `<div class="reply-composer"><span><b>Replying to ${escapeHtml(chat.replyTo.senderName || 'student')}</b><br />${escapeHtml(chat.replyTo.text)}</span><button type="button" data-clear-reply aria-label="Cancel reply">×</button></div>` : ''}
+      ${chat.editingMessageKey ? '<div class="reply-composer edit-composer"><span><b>Editing message</b><br />Make your changes, then press Save.</span><button type="button" data-cancel-edit aria-label="Cancel editing">×</button></div>' : chat.replyTo ? `<div class="reply-composer"><span><b>Replying to ${escapeHtml(chat.replyTo.senderName || 'student')}</b><br />${escapeHtml(chat.replyTo.text)}</span><button type="button" data-clear-reply aria-label="Cancel reply">×</button></div>` : ''}
       <div class="sendform ${isBlocked(partner?.id) ? 'blocked-sendform' : ''}">
-        <textarea id="messageInput" rows="1" placeholder="Write a message…" aria-label="Write a message" autofocus></textarea>
-        <button class="btn" data-send ${isBlocked(partner?.id) ? 'disabled' : ''}>Send</button>
+        <textarea id="messageInput" rows="1" placeholder="${chat.editingMessageKey ? 'Edit your message…' : 'Write a message…'}" aria-label="${chat.editingMessageKey ? 'Edit your message' : 'Write a message'}" autofocus></textarea>
+        <button class="btn" data-send ${isBlocked(partner?.id) ? 'disabled' : ''}>${chat.editingMessageKey ? 'Save' : 'Send'}</button>
       </div>
       ${isBlocked(partner?.id) ? '<p class="send-error">You blocked this student. Messages will fail to send.</p>' : ''}
       ${chat.session && chat.session.date ? `
@@ -1237,12 +1251,32 @@ function replyToMessage(chatId, key) {
   document.querySelector('#messageInput')?.focus();
 }
 
-async function editMessage(chatId, key) {
+function beginEditMessage(chatId, key) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   const message = findChatMessage(chat, key);
   if (!chat || !message || !canModifyMessage(message)) return;
-  const updatedText = window.prompt('Edit your message:', message.text)?.trim();
-  if (!updatedText || updatedText === message.text) return;
+  chat.editingMessageKey = key;
+  chat.replyTo = null;
+  state.messageDrafts[chatId] = message.text;
+  saveLocalState();
+  renderInbox();
+  const input = document.querySelector('#messageInput');
+  input?.focus();
+  input?.setSelectionRange(input.value.length, input.value.length);
+}
+
+async function saveEditedMessage(chatId) {
+  const chat = state.chats.find((entry) => entry.id === chatId);
+  const message = findChatMessage(chat, chat?.editingMessageKey);
+  const input = document.querySelector('#messageInput');
+  const updatedText = input?.value.trim() || '';
+  if (!chat || !message || !canModifyMessage(message)) return;
+  if (!updatedText || updatedText === message.text) {
+    chat.editingMessageKey = null;
+    delete state.messageDrafts[chatId];
+    renderInbox();
+    return;
+  }
   if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-') && message.id) {
     let { error } = await supabase.from('messages').update({ body: updatedText, edited_at: new Date().toISOString() }).eq('id', message.id).eq('sender_id', state.profile.id);
     if (error && /edited_at|column/i.test(error.message || '')) {
@@ -1255,6 +1289,8 @@ async function editMessage(chatId, key) {
   }
   message.text = updatedText;
   message.edited = true;
+  chat.editingMessageKey = null;
+  delete state.messageDrafts[chatId];
   saveLocalState();
   renderInbox();
 }
