@@ -1087,7 +1087,9 @@ function renderInbox() {
   if (activeChat && state.threadWasNearBottom) {
     scrollMessagesToLatest();
     if (state.threadInitialScrollPending) {
-      setTimeout(() => { state.threadInitialScrollPending = false; }, 0);
+      // Give the browser time to finish restoring layout after a full refresh.
+      setTimeout(() => { scrollMessagesToLatest(); }, 100);
+      setTimeout(() => { state.threadInitialScrollPending = false; }, 150);
     }
   } else if (activeChat && messages) {
     setTimeout(() => { messages.scrollTop = state.threadScrollTop; }, 0);
@@ -2103,6 +2105,12 @@ function authScreen(mode = 'signup') {
 }
 
 async function bootstrap() {
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  const scrollInitialThreadToBottom = () => {
+    if (state.view === 'inbox') scrollMessagesToLatest();
+  };
+  window.addEventListener('load', scrollInitialThreadToBottom, { once: true });
+  window.addEventListener('pageshow', scrollInitialThreadToBottom, { once: true });
   readLocalState();
   if (!configured || !supabase) {
     state.view = 'discover';
