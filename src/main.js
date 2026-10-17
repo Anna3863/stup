@@ -210,7 +210,7 @@ function scrollMessagesToLatest(smooth = false) {
     const messages = document.querySelector('.messages');
     if (!messages) return;
     messages.style.scrollBehavior = smooth ? 'smooth' : 'auto';
-    messages.scrollTop = messages.scrollHeight;
+    messages.scrollTop = Math.max(0, messages.scrollHeight - messages.clientHeight);
     if (smooth) setTimeout(() => { messages.style.scrollBehavior = ''; }, 350);
   }, 0);
 }
@@ -1084,15 +1084,13 @@ function renderInbox() {
     scrollMessagesToLatest(true);
   });
 
-  if (activeChat && state.threadWasNearBottom) {
+  if (activeChat) {
     scrollMessagesToLatest();
     if (state.threadInitialScrollPending) {
       // Give the browser time to finish restoring layout after a full refresh.
       setTimeout(() => { scrollMessagesToLatest(); }, 100);
       setTimeout(() => { state.threadInitialScrollPending = false; }, 150);
     }
-  } else if (activeChat && messages) {
-    setTimeout(() => { messages.scrollTop = state.threadScrollTop; }, 0);
   }
   state.threadScrollChatId = activeChat?.id || null;
 
