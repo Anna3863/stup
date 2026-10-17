@@ -513,13 +513,24 @@ function subscribeToMessages() {
 
 function subscribeToPresence() {
   if (!configured || !supabase || !state.session?.user) return;
-  supabase.channel('stup-presence', { config: { presence: { key: state.session.user.id } } })
-    .on('presence', { event: 'sync' }, () => {
-      const presenceState = supabase.getChannels().find((channel) => channel.topic === 'realtime:stup-presence')?.presenceState() || {};
-      state.onlineUsers = new Set(Object.keys(presenceState));
-      if (state.view === 'inbox') renderInbox();
-    })
-    .track({ online_at: new Date().toISOString() });
+  const channel = supabase.channel(`stup-presence-${state.session.user.id}`, {
+    config: { presence: { key: state.session.user.id } }
+  });
+  const refreshPresence = () => {
+    const presenceState = channel.presenceState() || {};
+    state.onlineUsers = new Set(Object.keys(presenceState));
+    if (state.view === 'inbox') renderInbox();
+  };
+  channel
+    .on('presence', { event: 'sync' }, refreshPresence)
+    .on('presence', { event: 'join' }, refreshPresence)
+    .on('presence', { event: 'leave' }, refreshPresence)
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        channel.track({ user_id: state.session.user.id, online_at: new Date().toISOString() });
+        refreshPresence();
+      }
+    });
 }
 
 function renderDiscover() {
@@ -744,7 +755,7 @@ function openProfileModal(personId) {
           <small>${escapeHtml(levelName(person.school_level))} · ${escapeHtml(person.county)}</small>
         </div>
         <div class="profile-menu-wrap">
-          <button class="profile-more" type="button" data-profile-more aria-expanded="false" aria-label="More actions for ${escapeHtml(person.display_name)}">⋯</button>
+          <button class="profile-more" type="button" data-profile-more aria-expanded="false" aria-label="More actions for ${escapeHtml(person.display_name)}"><span aria-hidden="true">⋯</span></button>
           <div class="profile-menu" data-profile-menu hidden>
             <button type="button" data-profile-favorite>${isFavorite(person.id) ? '♥ Remove favorite' : '♡ Add to favorites'}</button>
             <button type="button" data-profile-message>Message</button>
@@ -930,6 +941,10 @@ function renderInbox() {
     renderInbox();
   });
 
+  document.querySelector('[data-thread-profile]')?.addEventListener('click', () => {
+    openProfileModal(document.querySelector('[data-thread-profile]').dataset.threadProfile);
+  });
+
   const jumpButton = document.querySelector('[data-jump-latest]');
   jumpButton?.addEventListener('click', () => {
     markChatRead(activeChat);
@@ -976,11 +991,13 @@ function renderThread(chat) {
 
   let body = `
     <div class="threadtitle">
-      ${avatarMarkup(partner)}
-      <div>
-        <b>${escapeHtml(partner?.display_name || 'Student')}</b>
-        <small class="presence ${isPersonActive(partner?.id) ? 'online' : ''}">${isPersonActive(partner?.id) ? 'Active now' : 'Offline'}</small>
-      </div>
+      <button class="thread-profile" type="button" data-thread-profile="${escapeHtml(partner?.id || '')}" aria-label="Open ${escapeHtml(partner?.display_name || 'Student')}'s profile">
+        ${avatarMarkup(partner)}
+        <span>
+          <b>${escapeHtml(partner?.display_name || 'Student')}</b>
+          <small class="presence ${isPersonActive(partner?.id) ? 'online' : ''}">${isPersonActive(partner?.id) ? 'Active now' : 'Offline'}</small>
+        </span>
+      </button>
     </div>
 
     <div class="messages-wrap">

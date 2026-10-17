@@ -19,6 +19,9 @@
 .brand-lockup{display:flex;align-items:center;gap:8px;flex:none}
 .brand-mark{display:block;width:52px;height:52px;object-fit:contain;transform:translateY(5px);position:relative;z-index:2;filter:drop-shadow(0 5px 5px rgba(0,0,0,.2))}
 .topinner{height:64px;min-height:64px}
+.app-nav{display:flex;gap:4px;margin-left:auto}
+.app-nav button{border:0;background:transparent;color:var(--mu);font-weight:600;padding:8px 12px;border-radius:9px}
+.app-nav button.active,.app-nav button:hover{color:var(--tx);background:var(--bg-soft)}
 .top .brand-lockup{position:relative;height:32px;padding-left:52px}
 .top .brand-mark{position:absolute;left:0;top:-10px;transform:none}
 .top .logo{font-size:34px;letter-spacing:-1.3px}
@@ -36,6 +39,9 @@
 .chat-unread{padding:1px 6px;margin-left:4px}
 .messages-wrap{position:relative}
 .messages{scroll-behavior:smooth}
+.thread-profile{display:flex;align-items:center;gap:12px;padding:0;border:0;background:transparent;color:inherit;text-align:left}
+.thread-profile>span{display:grid;gap:2px}
+.thread-profile:hover b,.thread-profile:focus-visible b{color:var(--ac-strong)}
 .jump-latest{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid rgba(217,106,45,.45);border-radius:99px;background:var(--cd);color:var(--tx);box-shadow:0 6px 18px rgba(0,0,0,.3);font-size:12px;font-weight:700;z-index:1}
 .jump-latest span{font-size:18px;line-height:12px;color:var(--ac-strong)}
 .jump-latest.is-hidden{display:none}
@@ -46,7 +52,8 @@
 .send-error{margin:7px 0 0;font-size:12px}
 .sendform textarea{flex:1;min-height:42px;max-height:130px;resize:vertical;margin:0}
 .profile-menu-wrap{position:relative;margin-left:auto;align-self:flex-start}
-.profile-more{width:32px;height:32px;border:1px solid var(--ln);border-radius:50%;background:transparent;color:var(--tx);font-size:22px;line-height:18px}
+.profile-more{display:grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid var(--ln);border-radius:50%;background:transparent;color:var(--tx);font-size:22px;line-height:0}
+.profile-more span{display:block;transform:translateY(-3px)}
 .profile-more:hover,.profile-more:focus-visible{background:var(--bg-soft)}
 .profile-menu{position:absolute;right:0;top:40px;z-index:2;display:grid;min-width:170px;padding:6px;border:1px solid var(--ln);border-radius:12px;background:var(--card);box-shadow:0 12px 30px rgba(0,0,0,.3)}
 .profile-menu[hidden]{display:none}
@@ -54,6 +61,7 @@
 .profile-menu button:hover,.profile-menu button:focus-visible{background:var(--bg-soft)}
 .profile-menu .danger-action{color:#ff9b7f}
 @media(max-width:640px){.inboxgrid{display:block}.inbox-contacts.mobile-hidden,.thread.mobile-hidden{display:none}.inbox-contacts,.thread{min-height:0}}
+@media(max-width:640px){.topinner{height:auto;min-height:112px;padding:10px 12px;row-gap:8px;align-content:center}.app-nav{order:3;width:100%;margin-left:0}.app-nav button{flex:1}.credit{margin-left:auto}}
 .rating-editor-row{transition:opacity .16s,color .16s}
 .rating-editor-row.rating-disabled{opacity:.48}
 .rating-editor-row input[type='range']{appearance:none;height:14px;width:100%;margin:5px 0 2px;border:0;border-radius:999px;background:linear-gradient(90deg,var(--ac) 0 var(--rating),rgba(255,255,255,.1) var(--rating) 100%);cursor:pointer;accent-color:var(--ac);touch-action:none}
