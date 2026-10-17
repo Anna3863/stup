@@ -69,7 +69,15 @@ function readLocalState() {
     state.localUsers = Array.isArray(parsed.localUsers) ? parsed.localUsers : [];
     state.reviews = Array.isArray(parsed.reviews) ? parsed.reviews : [];
     state.chats = Array.isArray(parsed.chats)
-      ? parsed.chats.map((chat) => ({ ...chat, status: chat.status === 'declined' ? 'declined' : 'active' }))
+      ? parsed.chats.map((chat) => ({
+        ...chat,
+        status: chat.status === 'declined' ? 'declined' : 'active',
+        messages: Array.isArray(chat.messages) ? chat.messages.map((message) => ({
+          ...message,
+          read: message.read ?? true,
+          status: message.status || 'delivered'
+        })) : []
+      }))
       : [];
     state.favorites = Array.isArray(parsed.favorites) ? parsed.favorites : [];
     state.blockedProfiles = Array.isArray(parsed.blockedProfiles) ? parsed.blockedProfiles : [];
@@ -173,10 +181,21 @@ function unreadCount(chat, currentUserId = state.profile?.id) {
 function markChatRead(chat) {
   if (!chat) return;
   (chat.messages || []).forEach((message) => {
-    if (message.sender !== state.profile.id) message.read = true;
+    message.read = true;
+    if (message.sender === state.profile.id && message.status !== 'failed') message.status = 'read';
   });
   chat.unreadCount = 0;
   saveLocalState();
+}
+
+function scrollMessagesToLatest(smooth = false) {
+  setTimeout(() => {
+    const messages = document.querySelector('.messages');
+    if (!messages) return;
+    messages.style.scrollBehavior = smooth ? 'smooth' : 'auto';
+    messages.scrollTop = messages.scrollHeight;
+    if (smooth) setTimeout(() => { messages.style.scrollBehavior = ''; }, 350);
+  }, 0);
 }
 
 function blockProfile(profileId) {
@@ -438,7 +457,7 @@ async function fetchConversations() {
     const participants = (allMembers || []).filter((row) => row.conversation_id === id).map((row) => row.user_id);
     const remoteMessages = (messages || []).filter((row) => row.conversation_id === id);
     return { id, participants, status: 'active', requesterId: state.session.user.id,
-      messages: remoteMessages.map((row) => ({ sender: row.sender_id, text: row.body, createdAt: row.created_at, status: row.sender_id === state.profile.id ? 'delivered' : 'delivered' })),
+      messages: remoteMessages.map((row) => ({ sender: row.sender_id, text: row.body, createdAt: row.created_at, status: 'delivered', read: row.sender_id === state.profile.id })),
       lastUpdated: remoteMessages.at(-1)?.created_at || Date.now(),
       session: { date: '', method: 'online', completed: false } };
   });
@@ -513,12 +532,15 @@ function subscribeToMessages() {
 
 function subscribeToPresence() {
   if (!configured || !supabase || !state.session?.user) return;
-  const channel = supabase.channel(`stup-presence-${state.session.user.id}`, {
+  const channel = supabase.channel('stup-presence', {
     config: { presence: { key: state.session.user.id } }
   });
   const refreshPresence = () => {
     const presenceState = channel.presenceState() || {};
-    state.onlineUsers = new Set(Object.keys(presenceState));
+    state.onlineUsers = new Set(Object.entries(presenceState).flatMap(([key, metas]) => [
+      key,
+      ...(Array.isArray(metas) ? metas.map((meta) => meta.user_id).filter(Boolean) : [])
+    ].map(String)));
     if (state.view === 'inbox') renderInbox();
   };
   channel
@@ -949,17 +971,11 @@ function renderInbox() {
   jumpButton?.addEventListener('click', () => {
     markChatRead(activeChat);
     renderInbox();
-    requestAnimationFrame(() => {
-      const messages = document.querySelector('.messages');
-      if (messages) messages.scrollTop = messages.scrollHeight;
-    });
+    scrollMessagesToLatest(true);
   });
 
   if (activeChat && !unreadCount(activeChat)) {
-    requestAnimationFrame(() => {
-      const messages = document.querySelector('.messages');
-      if (messages) messages.scrollTop = messages.scrollHeight;
-    });
+    scrollMessagesToLatest();
   }
 
   const messageInput = document.querySelector('#messageInput');
