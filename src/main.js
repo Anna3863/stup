@@ -36,7 +36,8 @@ const state = {
   threadShowJump: false,
   threadScrollTop: 0,
   threadWasNearBottom: true,
-  threadScrollChatId: null
+  threadScrollChatId: null,
+  threadInitialScrollPending: false
 };
 
 const DEFAULT_SESSIONS = 3;
@@ -998,14 +999,17 @@ function renderInbox() {
   const openedNewThread = activeChat && state.threadScrollChatId !== activeChat.id;
   const composerWasFocused = document.activeElement?.id === 'messageInput';
   if (previousMessages && activeChat && !openedNewThread) {
-    const distanceFromBottom = previousMessages.scrollHeight - previousMessages.clientHeight - previousMessages.scrollTop;
-    state.threadScrollTop = previousMessages.scrollTop;
-    state.threadWasNearBottom = distanceFromBottom < 64;
-    state.threadShowJump = distanceFromBottom > 120;
+    if (!state.threadInitialScrollPending) {
+      const distanceFromBottom = previousMessages.scrollHeight - previousMessages.clientHeight - previousMessages.scrollTop;
+      state.threadScrollTop = previousMessages.scrollTop;
+      state.threadWasNearBottom = distanceFromBottom < 64;
+      state.threadShowJump = distanceFromBottom > 120;
+    }
   } else {
     state.threadScrollTop = 0;
     state.threadWasNearBottom = true;
     state.threadShowJump = false;
+    state.threadInitialScrollPending = Boolean(activeChat);
   }
   if (activeChat) state.activeChatId = activeChat.id;
   const totalUnread = chats.reduce((total, chat) => total + unreadCount(chat), 0);
@@ -1082,6 +1086,9 @@ function renderInbox() {
 
   if (activeChat && state.threadWasNearBottom) {
     scrollMessagesToLatest();
+    if (state.threadInitialScrollPending) {
+      setTimeout(() => { state.threadInitialScrollPending = false; }, 0);
+    }
   } else if (activeChat && messages) {
     setTimeout(() => { messages.scrollTop = state.threadScrollTop; }, 0);
   }
