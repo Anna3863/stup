@@ -345,7 +345,7 @@ function shell(content) {
         <div class="brand-lockup"><img class="brand-mark" src="${logoMark}" alt="" /><div class="logo">stup</div></div>
         <nav class="app-nav">
           <button class="${state.view === 'discover' ? 'active' : ''}" data-view="discover">Discover</button>
-          <button class="${state.view === 'inbox' ? 'active' : ''}" data-view="inbox">Inbox</button><button class="create-group-nav" type="button" data-create-group aria-label="Create a study group" title="Create a study group">+</button>
+          <button class="${state.view === 'inbox' ? 'active' : ''}" data-view="inbox">Inbox</button>
           <button class="${state.view === 'settings' ? 'active' : ''}" data-view="settings">Settings</button>
         </nav>
         <button class="credit sessions-trigger" type="button" data-sessions-open aria-haspopup="dialog" aria-label="View session balance and offers">✦ ${sessionBalance()} Sessions</button>
@@ -364,7 +364,6 @@ function shell(content) {
     });
   });
 
-  document.querySelector('[data-create-group]')?.addEventListener('click', createGroupStudy);
   document.querySelector('[data-sessions-open]')?.addEventListener('click', openSessionsModal);
 }
 
@@ -1094,6 +1093,7 @@ function renderInbox() {
           <span class="inbox-heading-icon" aria-hidden="true">✉</span>
           <h2>Inbox</h2>
           ${totalUnread ? `<span class="unread-count">${totalUnread > 99 ? '99+' : totalUnread}</span>` : ''}
+          <button class="inbox-add" type="button" data-create-group aria-label="Create a study group" title="Create a study group">+</button>
         </div>
         ${chats.length ? chats.map((chat) => {
           const partnerId = chat.participants.find((personId) => personId !== currentUserId);
@@ -1131,6 +1131,7 @@ function renderInbox() {
       renderInbox();
     });
   });
+  document.querySelector('[data-create-group]')?.addEventListener('click', createGroupStudy);
   document.querySelector('[data-inbox-back]')?.addEventListener('click', () => {
     state.inboxListOpen = true;
     renderInbox();
