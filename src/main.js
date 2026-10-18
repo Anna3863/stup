@@ -284,6 +284,11 @@ function avatarMarkup(person, className = '') {
   return `<div class="avatar ${photoUrl ? 'has-photo' : ''} ${className}">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" alt="" />` : escapeHtml(initials(person?.display_name || 'S'))}</div>`;
 }
 
+function trustBadge(person) {
+  if (person?.owner) return '<span class="owner-badge" title="Platform owner" aria-label="Platform owner">♛</span>';
+  return person?.verified ? '<span class="verified" title="Passport photo verified" aria-label="Passport photo verified">✓</span>' : '';
+}
+
 function isPersonActive(personId) {
   return state.onlineUsers.has(personId);
 }
@@ -423,24 +428,24 @@ function readDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Could not read the student ID file.'));
+    reader.onerror = () => reject(new Error('Could not read the passport photo file.'));
     reader.readAsDataURL(file);
   });
 }
 
-async function uploadStudentPhoto(file) {
+async function uploadPassportPhoto(file) {
   if (!file) return '';
   if (configured && supabase) {
     try {
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `student-ids/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from('student-ids').upload(path, file, {
+      const path = `passport-photos/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from('passport-photos').upload(path, file, {
         cacheControl: '3600',
         upsert: true,
         contentType: file.type || 'image/jpeg'
       });
       if (!error) {
-        const { data } = supabase.storage.from('student-ids').getPublicUrl(path);
+        const { data } = supabase.storage.from('passport-photos').getPublicUrl(path);
         return data.publicUrl;
       }
     } catch {
@@ -703,7 +708,7 @@ function renderDiscover() {
             <div class="personhead">
               ${avatarMarkup(person)}
               <div class="personinfo">
-                <b>${escapeHtml(person.display_name)} ${person.verified ? '<span class="verified" title="Student ID verified">✓</span>' : ''}</b>
+                <b>${escapeHtml(person.display_name)} ${trustBadge(person)}</b>
                 <small>${escapeHtml(levelName(person.school_level))} · ${escapeHtml(person.county)}</small>
               </div>
             </div>
@@ -851,7 +856,7 @@ function openProfileModal(personId) {
       <div class="threadtitle">
         ${avatarMarkup(person)}
         <div>
-          <b id="profile-title">${escapeHtml(person.display_name)}</b>
+          <b id="profile-title">${escapeHtml(person.display_name)} ${trustBadge(person)}</b>
           <small>${escapeHtml(levelName(person.school_level))} · ${escapeHtml(person.county)}</small>
         </div>
         <div class="profile-menu-wrap">
@@ -865,7 +870,7 @@ function openProfileModal(personId) {
         </div>
       </div>
       <p>${escapeHtml(person.bio || 'No bio added yet.')}</p>
-      ${person.verified ? '<span class="tag">Verified student</span>' : '<span class="muted small">Student ID pending verification</span>'}
+      ${person.owner ? '<span class="tag">Platform owner</span>' : person.verified ? '<span class="tag">Passport photo verified</span>' : '<span class="muted small">Passport photo pending verification</span>'}
       <h3>Subject ratings</h3>
       ${tags.length ? `<div class="subject-ratings">
         ${tags.map(({ subject, rating }) => `
@@ -1407,8 +1412,8 @@ function bookSession(chatId) {
   if (!date) return;
   const method = window.prompt('Session type: online or in-person?', 'online');
   const normalizedMethod = (method || 'online').toLowerCase().includes('in') ? 'in-person' : 'online';
-  if (normalizedMethod === 'in-person' && !state.profile.verified) {
-    toast('In-person sessions require a verified student ID. Choose online or verify your profile first.');
+  if (normalizedMethod === 'in-person' && !state.profile.verified && !state.profile.owner) {
+    toast('In-person sessions require a verified passport photo. Choose online or verify your profile first.');
     return;
   }
   if (Number.isNaN(new Date(date.replace(' ', 'T')).getTime())) {
@@ -1664,8 +1669,8 @@ function renderSettings() {
           <textarea id="profile-bio" rows="3">${escapeHtml(state.profile.bio || '')}</textarea>
         </label>
         <div class="notice">
-          <strong>${state.profile.verified ? '✓ Student ID verified' : 'Student ID pending verification'}</strong>
-          <p class="muted small">${state.profile.verified ? 'In-person sessions are available.' : 'Online sessions are available now. A verified ID is required for in-person meetings.'}</p>
+          <strong>${state.profile.owner ? '♛ Platform owner' : state.profile.verified ? '✓ Passport photo verified' : 'Passport photo pending verification'}</strong>
+          <p class="muted small">${state.profile.verified || state.profile.owner ? 'In-person sessions are available.' : 'Online sessions are available now. A verified passport photo is required for in-person meetings.'}</p>
         </div>
 
         <div class="subject-ratings">
@@ -1762,7 +1767,7 @@ function renderSettings() {
           main_subject: updatedProfile.main_subject,
           subject_ratings: updatedProfile.subject_ratings,
           bio: updatedProfile.bio,
-          student_id_photo_url: updatedProfile.student_id_photo_url || null,
+          passport_photo_url: updatedProfile.passport_photo_url || null,
           profile_photo_url: updatedProfile.profile_photo_url || null
         }).eq('id', state.session.user.id).select('id').maybeSingle();
         if (error) throw error;
@@ -1847,8 +1852,8 @@ function authScreen(mode = 'signup') {
             <input name="display_name" required maxlength="40" placeholder="Alex Popescu" />
           </label>
           <label>
-            Student ID photo
-            <input name="student_photo" type="file" accept="image/*" />
+            Passport photo
+            <input name="passport_photo" type="file" accept="image/*" />
           </label>
         ` : ''}
 
@@ -1877,7 +1882,7 @@ function authScreen(mode = 'signup') {
             </select>
           </label>
 
-          <p class="muted small">If Supabase is enabled, we’ll save the student ID image in the student-ids bucket when available.</p>
+          <p class="muted small">If Supabase is enabled, we’ll save the passport photo in the passport-photos bucket when available.</p>
         ` : ''}
 
         <button class="btn" type="submit">${signup ? 'Create account' : 'Log in'}</button>
@@ -1910,7 +1915,7 @@ function authScreen(mode = 'signup') {
         const display_name = String(form.get('display_name') || '').trim();
         const school_level = Number(form.get('school_level') || 1);
         const county = String(form.get('county') || 'București');
-        const studentPhoto = form.get('student_photo');
+        const passportPhoto = form.get('passport_photo');
         if (!display_name) {
           toast('Please add your full name.');
           return;
@@ -1943,7 +1948,8 @@ function authScreen(mode = 'signup') {
                 bio: '',
                 lumen_balance: DEFAULT_SESSIONS,
                 verified: false,
-                student_id_photo_url: '',
+                owner: false,
+                passport_photo_url: '',
                 profile_photo_url: '',
                 password,
                 email,
@@ -1958,7 +1964,7 @@ function authScreen(mode = 'signup') {
               render();
               return;
             }
-            const photoUrl = studentPhoto && studentPhoto.size ? await uploadStudentPhoto(studentPhoto) : '';
+            const photoUrl = passportPhoto && passportPhoto.size ? await uploadPassportPhoto(passportPhoto) : '';
             const { data: profileRow, error: profileError } = await supabase.from('profiles').upsert({
               id: userId,
               display_name,
@@ -1969,7 +1975,7 @@ function authScreen(mode = 'signup') {
               bio: '',
               lumen_balance: DEFAULT_SESSIONS,
               verified: false,
-              student_id_photo_url: photoUrl || null,
+              passport_photo_url: photoUrl || null,
               profile_photo_url: null
             }).select().single();
             if (profileError) throw profileError;
@@ -1995,7 +2001,8 @@ function authScreen(mode = 'signup') {
           bio: '',
           lumen_balance: DEFAULT_SESSIONS,
           verified: false,
-          student_id_photo_url: studentPhoto && studentPhoto.size ? await readDataUrl(studentPhoto) : '',
+          owner: false,
+          passport_photo_url: passportPhoto && passportPhoto.size ? await readDataUrl(passportPhoto) : '',
           profile_photo_url: '',
           password,
           email,
@@ -2031,7 +2038,7 @@ function authScreen(mode = 'signup') {
         if (profileRow) {
           state.profile = profileRow;
         } else {
-          const newProfile = { id: data.user.id, display_name: data.user.user_metadata?.display_name || data.user.email.split('@')[0], school_level: Number(data.user.user_metadata?.school_level ?? 1), county: data.user.user_metadata?.county || 'București', main_subject: 'Mathematics', subject_ratings: {}, bio: '', lumen_balance: DEFAULT_SESSIONS, verified: false, student_id_photo_url: null, profile_photo_url: null };
+          const newProfile = { id: data.user.id, display_name: data.user.user_metadata?.display_name || data.user.email.split('@')[0], school_level: Number(data.user.user_metadata?.school_level ?? 1), county: data.user.user_metadata?.county || 'București', main_subject: 'Mathematics', subject_ratings: {}, bio: '', lumen_balance: DEFAULT_SESSIONS, verified: false, owner: false, passport_photo_url: null, profile_photo_url: null };
           const { data: createdProfile, error: createProfileError } = await supabase.from('profiles').insert(newProfile).select().single();
           if (createProfileError) throw createProfileError;
           state.profile = createdProfile;
@@ -2063,7 +2070,7 @@ function authScreen(mode = 'signup') {
         const display_name = String(form.get('display_name') || '').trim();
         const school_level = Number(form.get('school_level') || 1);
         const county = String(form.get('county') || 'București');
-        const studentPhoto = form.get('student_photo');
+        const passportPhoto = form.get('passport_photo');
         const existingUser = state.localUsers.find((person) => person.email === email);
         if (existingUser) {
           toast('This email already has a local demo account.');
@@ -2079,7 +2086,8 @@ function authScreen(mode = 'signup') {
           bio: '',
           lumen_balance: DEFAULT_SESSIONS,
           verified: false,
-          student_id_photo_url: studentPhoto && studentPhoto.size ? await readDataUrl(studentPhoto) : '',
+          owner: false,
+          passport_photo_url: passportPhoto && passportPhoto.size ? await readDataUrl(passportPhoto) : '',
           profile_photo_url: '',
           password,
           email,

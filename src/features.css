@@ -1,4 +1,5 @@
 .verified{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--ac);color:#fff;font-size:11px;vertical-align:2px}
+.owner-badge{display:inline-grid;place-items:center;width:19px;height:19px;border-radius:50%;background:linear-gradient(135deg,#f6c453,#d88a19);color:#2b1b05;font-size:13px;line-height:1;vertical-align:2px}
 .profile-summary{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--ln);border-radius:12px;background:rgba(217,106,45,.08)}
 .profile-summary strong{color:var(--ac-strong)}
 .tag{display:inline-block;border-radius:999px;padding:4px 9px;background:rgba(217,106,45,.12);border:1px solid rgba(217,106,45,.3);color:var(--ac-strong);font-size:12px;font-weight:700}

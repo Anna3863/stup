@@ -1,5 +1,5 @@
 -- stup MVP schema. Run in Supabase SQL Editor.
--- Do not store CNPs, phone numbers, or identity-document images in profiles.
+-- Keep sensitive identity images in private storage; profiles only store their storage URL.
 create extension if not exists pgcrypto;
 
 create table if not exists public.profiles (
@@ -12,7 +12,8 @@ create table if not exists public.profiles (
   lumen_balance integer not null default 3 check (lumen_balance >= 0),
   bio text not null default '',
   verified boolean not null default false,
-  student_id_photo_url text,
+  owner boolean not null default false,
+  passport_photo_url text,
   profile_photo_url text,
   created_at timestamptz not null default now()
 );
@@ -21,9 +22,28 @@ create table if not exists public.profiles (
 alter table public.profiles add column if not exists subject_ratings jsonb not null default '{}'::jsonb;
 alter table public.profiles add column if not exists bio text not null default '';
 alter table public.profiles add column if not exists verified boolean not null default false;
-alter table public.profiles add column if not exists student_id_photo_url text;
+alter table public.profiles add column if not exists owner boolean not null default false;
+alter table public.profiles add column if not exists passport_photo_url text;
 alter table public.profiles add column if not exists profile_photo_url text;
 alter table public.profiles add column if not exists lumen_balance integer not null default 3;
+
+create or replace function public.prevent_owner_self_assignment()
+returns trigger
+language plpgsql
+security invoker
+as $$
+begin
+  if auth.uid() is not null and new.owner is distinct from old.owner then
+    raise exception 'Only an administrator can change the owner flag';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists prevent_owner_self_assignment on public.profiles;
+create trigger prevent_owner_self_assignment
+before update on public.profiles
+for each row execute function public.prevent_owner_self_assignment();
 
 create table if not exists public.profile_reviews (
   id uuid primary key default gen_random_uuid(),
@@ -104,10 +124,10 @@ create policy "Users can add their favorites" on public.favorite_profiles for in
 create policy "Users can remove their favorites" on public.favorite_profiles for delete to authenticated using (user_id = auth.uid());
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('student-ids', 'student-ids', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+values ('passport-photos', 'passport-photos', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do update set file_size_limit = excluded.file_size_limit;
-create policy "Users can upload their student ID" on storage.objects for insert to authenticated
-with check (bucket_id = 'student-ids' and (storage.foldername(name))[1] = 'student-ids');
+create policy "Users can upload their passport photo" on storage.objects for insert to authenticated
+with check (bucket_id = 'passport-photos' and (storage.foldername(name))[1] = 'passport-photos');
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('profile-photos', 'profile-photos', true, 5242880, array['image/jpeg', 'image/png', 'image/webp'])

@@ -18,7 +18,7 @@ create policy "Users can submit reports" on public.reports for insert to authent
   with check (reporter_profile_id = auth.uid() and target_profile_id <> auth.uid());
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('student-ids', 'student-ids', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+values ('passport-photos', 'passport-photos', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do update set file_size_limit = excluded.file_size_limit;
 
 notify pgrst, 'reload schema';
