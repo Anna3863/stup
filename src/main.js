@@ -1011,7 +1011,7 @@ async function createGroupStudy() {
     <section class="profile-panel card group-create-panel" role="dialog" aria-modal="true" aria-labelledby="group-title">
       <div class="sessions-heading">
         <div><span class="eyebrow">Group study</span><h2 id="group-title">Create a study group</h2></div>
-        <button class="modal-close" type="button" data-group-close aria-label="Close">×</button>
+        <button class="modal-close" type="button" data-group-close aria-label="Close"><span aria-hidden="true">×</span></button>
       </div>
       <form class="form" data-group-form>
         <label>Group name<input name="title" maxlength="60" required placeholder="Biology study group" /></label>
@@ -1093,7 +1093,7 @@ function renderInbox() {
           <span class="inbox-heading-icon" aria-hidden="true">✉</span>
           <h2>Inbox</h2>
           ${totalUnread ? `<span class="unread-count">${totalUnread > 99 ? '99+' : totalUnread}</span>` : ''}
-          <button class="inbox-add" type="button" data-create-group aria-label="Create a study group" title="Create a study group">+</button>
+          <button class="inbox-add" type="button" data-create-group aria-label="Create a study group" title="Create a study group"><span aria-hidden="true">+</span></button>
         </div>
         ${chats.length ? chats.map((chat) => {
           const partnerId = chat.participants.find((personId) => personId !== currentUserId);
