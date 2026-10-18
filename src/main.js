@@ -345,7 +345,7 @@ function shell(content) {
         <div class="brand-lockup"><img class="brand-mark" src="${logoMark}" alt="" /><div class="logo">stup</div></div>
         <nav class="app-nav">
           <button class="${state.view === 'discover' ? 'active' : ''}" data-view="discover">Discover</button>
-          <button class="${state.view === 'inbox' ? 'active' : ''}" data-view="inbox">Inbox</button>
+          <button class="${state.view === 'inbox' ? 'active' : ''}" data-view="inbox">Inbox</button><button class="create-group-nav" type="button" data-create-group aria-label="Create a study group" title="Create a study group">+</button>
           <button class="${state.view === 'settings' ? 'active' : ''}" data-view="settings">Settings</button>
         </nav>
         <button class="credit sessions-trigger" type="button" data-sessions-open aria-haspopup="dialog" aria-label="View session balance and offers">✦ ${sessionBalance()} Sessions</button>
@@ -364,6 +364,7 @@ function shell(content) {
     });
   });
 
+  document.querySelector('[data-create-group]')?.addEventListener('click', createGroupStudy);
   document.querySelector('[data-sessions-open]')?.addEventListener('click', openSessionsModal);
 }
 
@@ -511,6 +512,8 @@ async function fetchConversations() {
     .select('conversation_id,user_id').eq('user_id', state.session.user.id);
   if (error || !memberships?.length) return;
   const ids = memberships.map((row) => row.conversation_id);
+  let { data: conversations } = await supabase.from('conversations').select('id,title,is_group').in('id', ids);
+  if (!conversations) conversations = [];
   let { data: allMembers, error: membersError } = await supabase.from('conversation_members').select('conversation_id,user_id,last_read_at').in('conversation_id', ids);
   if (membersError && /last_read_at|column/i.test(membersError.message || '')) {
     ({ data: allMembers } = await supabase.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids));
@@ -526,11 +529,12 @@ async function fetchConversations() {
       .order('created_at'));
   }
   state.chats = ids.map((id) => {
+    const conversation = conversations.find((row) => row.id === id);
     const participants = (allMembers || []).filter((row) => row.conversation_id === id).map((row) => row.user_id);
     const remoteMessages = (messages || []).filter((row) => row.conversation_id === id);
     const partnerId = participants.find((participantId) => participantId !== state.profile.id);
     const partnerReadAt = (allMembers || []).find((row) => row.conversation_id === id && row.user_id === partnerId)?.last_read_at;
-    return { id, participants, status: 'active', requesterId: state.session.user.id,
+    return { id, title: conversation?.title || '', isGroup: Boolean(conversation?.is_group), participants, status: 'active', requesterId: state.session.user.id,
       messages: remoteMessages.map((row) => {
         const isMine = row.sender_id === state.profile.id;
         const partnerHasRead = Boolean(isMine && partnerReadAt && new Date(partnerReadAt).getTime() >= new Date(row.created_at).getTime());
@@ -995,6 +999,70 @@ async function startOrOpenChat(otherUserId) {
   render();
 }
 
+async function createGroupStudy() {
+  const people = state.people.length ? state.people : state.localUsers.filter((person) => person.id !== state.profile.id);
+  if (!people.length) {
+    toast('There are no other students to add yet.');
+    return;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'profile-modal';
+  modal.innerHTML = `
+    <section class="profile-panel card group-create-panel" role="dialog" aria-modal="true" aria-labelledby="group-title">
+      <div class="sessions-heading">
+        <div><span class="eyebrow">Group study</span><h2 id="group-title">Create a study group</h2></div>
+        <button class="modal-close" type="button" data-group-close aria-label="Close">×</button>
+      </div>
+      <form class="form" data-group-form>
+        <label>Group name<input name="title" maxlength="60" required placeholder="Biology study group" /></label>
+        <div class="group-member-list">
+          ${people.map((person) => `<label class="group-member"><input type="checkbox" name="member" value="${escapeHtml(person.id)}" /> <span>${escapeHtml(person.display_name)}</span></label>`).join('')}
+        </div>
+        <p class="muted small">Choose at least one other student.</p>
+        <div class="row"><button class="btn" type="submit">Create group</button><button class="btn secondary" type="button" data-group-cancel>Cancel</button></div>
+      </form>
+    </section>
+  `;
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  modal.querySelector('[data-group-close]').addEventListener('click', close);
+  modal.querySelector('[data-group-cancel]').addEventListener('click', close);
+  modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
+  modal.querySelector('[data-group-form]').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const title = String(form.get('title') || '').trim();
+    const memberIds = form.getAll('member').map(String);
+    if (!title || !memberIds.length) {
+      toast('Add a group name and at least one student.');
+      return;
+    }
+    const submit = event.currentTarget.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      let conversationId = `group-${Date.now()}`;
+      const participants = [state.profile.id, ...memberIds];
+      if (configured && supabase && state.session?.user) {
+        const { data, error } = await supabase.rpc('create_group_conversation', { group_name: title, member_ids: memberIds });
+        if (error) throw error;
+        conversationId = data;
+      }
+      const newChat = { id: conversationId, title, isGroup: true, participants, status: 'active', requesterId: state.profile.id, messages: [], lastUpdated: Date.now(), session: { date: '', method: 'online', completed: false } };
+      state.chats.unshift(newChat);
+      state.activeChatId = conversationId;
+      state.view = 'inbox';
+      state.inboxListOpen = false;
+      saveLocalState();
+      close();
+      render();
+    } catch (error) {
+      submit.disabled = false;
+      toast(error.message || 'Could not create the study group.');
+    }
+  });
+}
+
 function renderInbox() {
   const currentUserId = state.profile.id;
   const isMobile = window.matchMedia('(max-width: 640px)').matches;
@@ -1032,10 +1100,10 @@ function renderInbox() {
           const partner = getPersonById(partnerId);
           return `
             <button class="chatitem ${activeChat && activeChat.id === chat.id ? 'selected' : ''}" data-chat-id="${chat.id}">
-              ${avatarMarkup(partner, 'small-avatar')}
+              ${chat.isGroup ? '<div class="group-thread-icon small-avatar" aria-hidden="true">👥</div>' : avatarMarkup(partner, 'small-avatar')}
               <span>
-                <b>${escapeHtml(partner?.display_name || 'Student')}</b>
-              <small>${isPersonActive(partnerId) ? 'Active now' : 'Offline'}${unreadCount(chat) ? ` · <strong class="chat-unread">${unreadCount(chat)} new</strong>` : ''}</small>
+                <b>${escapeHtml(chat.isGroup ? (chat.title || 'Study group') : (partner?.display_name || 'Student'))}</b>
+              <small>${chat.isGroup ? `${chat.participants.length} members` : (isPersonActive(partnerId) ? 'Active now' : 'Offline')}${unreadCount(chat) ? ` · <strong class="chat-unread">${unreadCount(chat)} new</strong>` : ''}</small>
               </span>
             </button>
           `;
@@ -1063,7 +1131,6 @@ function renderInbox() {
       renderInbox();
     });
   });
-
   document.querySelector('[data-inbox-back]')?.addEventListener('click', () => {
     state.inboxListOpen = true;
     renderInbox();
@@ -1169,17 +1236,13 @@ function renderInbox() {
 function renderThread(chat) {
   const currentUserId = state.profile.id;
   const partner = getPersonById(chat.participants.find((personId) => personId !== currentUserId));
+  const groupMembers = chat.participants.filter((personId) => personId !== currentUserId).map((personId) => getPersonById(personId)?.display_name || 'Student');
+  const threadHeader = chat.isGroup
+    ? `<div class="threadtitle"><div class="group-thread-icon" aria-hidden="true">👥</div><span><b>${escapeHtml(chat.title || 'Study group')}</b><small>${chat.participants.length} members · ${escapeHtml(groupMembers.join(', '))}</small></span></div>`
+    : `<div class="threadtitle"><button class="thread-profile" type="button" data-thread-profile="${escapeHtml(partner?.id || '')}" aria-label="Open ${escapeHtml(partner?.display_name || 'Student')}'s profile">${avatarMarkup(partner)}<span><b>${escapeHtml(partner?.display_name || 'Student')}</b><small class="presence ${isPersonActive(partner?.id) ? 'online' : ''}">${isPersonActive(partner?.id) ? 'Active now' : 'Offline'}</small></span></button></div>`;
 
   let body = `
-    <div class="threadtitle">
-      <button class="thread-profile" type="button" data-thread-profile="${escapeHtml(partner?.id || '')}" aria-label="Open ${escapeHtml(partner?.display_name || 'Student')}'s profile">
-        ${avatarMarkup(partner)}
-        <span>
-          <b>${escapeHtml(partner?.display_name || 'Student')}</b>
-          <small class="presence ${isPersonActive(partner?.id) ? 'online' : ''}">${isPersonActive(partner?.id) ? 'Active now' : 'Offline'}</small>
-        </span>
-      </button>
-    </div>
+    ${threadHeader}
 
     <div class="messages-wrap">
       <div class="messages">
@@ -1193,7 +1256,7 @@ function renderThread(chat) {
           <div class="bubble ${mine ? 'mine' : ''} ${message.status === 'failed' ? 'failed' : ''}" data-message-key="${escapeHtml(key)}">
             ${message.replyToText ? `<div class="reply-quote">${escapeHtml(message.replyToText)}</div>` : ''}
             <p>${messageMarkup(message.text)}</p>
-            <small>${mine ? 'You' : escapeHtml(partner?.display_name || 'Them')}${message.edited ? ' · edited' : ''} ${receipt}</small>
+            <small>${mine ? 'You' : escapeHtml(chat.isGroup ? (getPersonById(message.sender)?.display_name || 'Student') : (partner?.display_name || 'Them'))}${message.edited ? ' · edited' : ''} ${receipt}</small>
             <div class="message-actions">
               <button class="message-more" type="button" data-message-more aria-expanded="false" aria-label="Message actions">⋯</button>
               <div class="message-menu" hidden>

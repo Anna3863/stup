@@ -59,8 +59,12 @@ create table if not exists public.profile_reviews (
 
 create table if not exists public.conversations (
   id uuid primary key default gen_random_uuid(),
+  title text,
+  is_group boolean not null default false,
   created_at timestamptz not null default now()
 );
+alter table public.conversations add column if not exists title text;
+alter table public.conversations add column if not exists is_group boolean not null default false;
 create table if not exists public.conversation_members (
   conversation_id uuid not null references public.conversations(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -204,6 +208,31 @@ end;
 $$;
 revoke all on function public.get_or_create_conversation(uuid) from public;
 grant execute on function public.get_or_create_conversation(uuid) to authenticated;
+
+create or replace function public.create_group_conversation(group_name text, member_ids uuid[])
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_user_id uuid := auth.uid();
+  new_id uuid;
+  selected_ids uuid[];
+begin
+  if current_user_id is null then raise exception 'You must be signed in'; end if;
+  if group_name is null or char_length(trim(group_name)) not between 1 and 60 then raise exception 'Enter a group name'; end if;
+  selected_ids := array(select distinct id from unnest(coalesce(member_ids, '{}')) id where id <> current_user_id);
+  if coalesce(array_length(selected_ids, 1), 0) < 1 then raise exception 'Choose at least one other student'; end if;
+  if exists (select 1 from unnest(selected_ids) id where not exists (select 1 from public.profiles where profiles.id = id)) then raise exception 'One or more students were not found'; end if;
+  insert into public.conversations(title, is_group) values (trim(group_name), true) returning id into new_id;
+  insert into public.conversation_members(conversation_id, user_id) values (new_id, current_user_id);
+  insert into public.conversation_members(conversation_id, user_id) select new_id, id from unnest(selected_ids) id;
+  return new_id;
+end;
+$$;
+revoke all on function public.create_group_conversation(text, uuid[]) from public;
+grant execute on function public.create_group_conversation(text, uuid[]) to authenticated;
 
 -- Enable Supabase Realtime for new messages. If this errors because the table is
 -- already in the publication, it is already enabled and can be ignored.
