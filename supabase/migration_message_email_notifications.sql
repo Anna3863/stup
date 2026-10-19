@@ -48,8 +48,6 @@ end;
 $$;
 
 drop trigger if exists queue_message_email_notifications on public.messages;
-create trigger queue_message_email_notifications
-after insert on public.messages
-for each row execute function public.queue_message_email_notifications();
+create trigger queue_message_email_notifications after insert on public.messages for each row execute function public.queue_message_email_notifications();
 
 notify pgrst, 'reload schema';
