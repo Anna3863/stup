@@ -579,6 +579,21 @@ async function fetchConversations() {
   if (membersError && /last_read_at|column/i.test(membersError.message || '')) {
     ({ data: allMembers } = await supabase.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids));
   }
+  // Conversations contain user IDs, while the UI resolves names from profiles.
+  // Hydrate every participant explicitly so a failed/late discover query cannot
+  // make an existing conversation fall back to the generic "Student" label.
+  const participantIds = [...new Set((allMembers || []).map((row) => row.user_id).filter(Boolean))];
+  if (participantIds.length) {
+    const { data: participantProfiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('id', participantIds);
+    if (!profilesError && participantProfiles?.length) {
+      const byId = new Map(state.people.map((person) => [person.id, person]));
+      participantProfiles.forEach((person) => byId.set(person.id, person));
+      state.people = [...byId.values()].filter((person) => person.id !== state.profile?.id);
+    }
+  }
   let { data: messages, error: messagesError } = await supabase.from('messages')
     .select('id,conversation_id,sender_id,body,created_at,edited_at,reply_to_id')
     .in('conversation_id', ids)
