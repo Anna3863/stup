@@ -1666,7 +1666,7 @@ function openZoomInBrowser(url, popup = null) {
     return;
   }
   const opened = window.open(browserUrl, '_blank', 'noopener,noreferrer');
-  if (!opened) window.location.assign(url);
+  if (!opened) toast('Your browser blocked the Zoom tab. Please allow pop-ups for stup and try again.');
 }
 
 async function openZoomLink(chatId) {
