@@ -61,10 +61,19 @@ create table if not exists public.conversations (
   id uuid primary key default gen_random_uuid(),
   title text,
   is_group boolean not null default false,
+  requester_id uuid references public.profiles(id),
+  zoom_meeting_id text,
+  zoom_join_url text,
   created_at timestamptz not null default now()
 );
 alter table public.conversations add column if not exists title text;
 alter table public.conversations add column if not exists is_group boolean not null default false;
+alter table public.conversations add column if not exists requester_id uuid references public.profiles(id);
+alter table public.conversations add column if not exists zoom_meeting_id text;
+alter table public.conversations add column if not exists zoom_join_url text;
+create unique index if not exists conversations_zoom_meeting_id_key
+  on public.conversations(zoom_meeting_id)
+  where zoom_meeting_id is not null;
 create table if not exists public.conversation_members (
   conversation_id uuid not null references public.conversations(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -236,7 +245,7 @@ begin
   where (select count(*) from public.conversation_members cm where cm.conversation_id = c.id) = 2
   limit 1;
   if found_id is not null then return found_id; end if;
-  insert into public.conversations default values returning id into new_id;
+  insert into public.conversations(requester_id) values (current_user_id) returning id into new_id;
   insert into public.conversation_members(conversation_id,user_id) values (new_id,current_user_id),(new_id,other_user);
   return new_id;
 end;

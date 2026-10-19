@@ -41,6 +41,12 @@ async function getZoomAccessToken() {
   return data.access_token as string;
 }
 
+async function emailHash(email: string) {
+  const normalized = email.trim().toLowerCase();
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
+  return Array.from(new Uint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
@@ -55,6 +61,39 @@ Deno.serve(async (request) => {
   if (authError) return jsonResponse({ error: 'Unauthorized' }, 401);
 
   try {
+    const body = await request.json();
+    const conversationId = String(body?.conversation_id || '');
+    if (!conversationId) throw new Error('conversation_id is required.');
+
+    const { data: conversation, error: conversationError } = await supabase
+      .from('conversations')
+      .select('id,requester_id,zoom_meeting_id,zoom_join_url')
+      .eq('id', conversationId)
+      .single();
+    if (conversationError || !conversation) throw new Error('Conversation not found.');
+
+    const { data: members, error: membersError } = await supabase
+      .from('conversation_members')
+      .select('user_id')
+      .eq('conversation_id', conversationId);
+    if (membersError || !members || members.length !== 2) throw new Error('Zoom attendance requires a two-person conversation.');
+
+    const memberIds = members.map((member) => member.user_id as string);
+    const { data: authUser } = await supabase.auth.getUser(accessToken);
+    if (!authUser.user || !memberIds.includes(authUser.user.id)) throw new Error('You are not in this conversation.');
+    const requesterId = conversation.requester_id || authUser.user.id;
+    if (!memberIds.includes(requesterId)) throw new Error('The conversation requester is not a member.');
+    const helperId = memberIds.find((id) => id !== requesterId)!;
+    const [requester, helper] = await Promise.all([
+      supabase.auth.admin.getUserById(requesterId),
+      supabase.auth.admin.getUserById(helperId)
+    ]);
+    if (!requester.data.user?.email || !helper.data.user?.email) throw new Error('Both participants need verified email addresses.');
+
+    if (conversation.zoom_meeting_id && conversation.zoom_join_url) {
+      return jsonResponse({ join_url: conversation.zoom_join_url });
+    }
+
     const zoomToken = await getZoomAccessToken();
     const response = await fetch('https://api.zoom.us/v2/users/me/meetings', {
       method: 'POST',
@@ -79,7 +118,23 @@ Deno.serve(async (request) => {
     const meeting = await response.json();
     if (!meeting.join_url) throw new Error('Zoom did not return a meeting join URL.');
     const browserJoinUrl = String(meeting.join_url).replace(/\/j\/(\d+)/, '/wc/$1/join');
-    return jsonResponse({ join_url: browserJoinUrl, meeting_id: meeting.id });
+    const meetingId = String(meeting.id);
+    const { error: saveError } = await supabase.from('conversations').update({
+      requester_id: requesterId,
+      zoom_meeting_id: meetingId,
+      zoom_join_url: browserJoinUrl
+    }).eq('id', conversationId);
+    if (saveError) throw saveError;
+    const { error: attendanceError } = await supabase.from('zoom_session_attendance').insert({
+      conversation_id: conversationId,
+      meeting_id: meetingId,
+      requester_id: requesterId,
+      helper_id: helperId,
+      requester_email_hash: await emailHash(requester.data.user.email),
+      helper_email_hash: await emailHash(helper.data.user.email)
+    });
+    if (attendanceError) throw attendanceError;
+    return jsonResponse({ join_url: browserJoinUrl });
   } catch (error) {
     return jsonResponse({ error: errorText(error) }, 500);
   }

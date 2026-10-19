@@ -16,12 +16,14 @@ This is a small, low-cost step toward turning the original `stup_v2.html` protot
 
 If you already created the database from the earlier stup MVP, run `supabase/migration_subject_ratings.sql`, `supabase/migration_profile_reviews.sql`, `supabase/migration_profile_fields.sql`, and `supabase/migration_owner_passport.sql` in SQL Editor. The profile fields migration adds the bio, verification flag, owner flag, and passport-photo URL columns required by profile creation and saving, then asks PostgREST to reload its schema cache. If you still see a `bio` column/schema-cache error, confirm the migration ran successfully and wait briefly for the API cache to refresh before saving again. The profile reviews migration also adds the profile-picture column and configures the `profile-photos` bucket. Do not rerun the full schema on an existing database, because its policies already exist.
 
-To create shared Zoom meetings from a conversation, create a Zoom Server-to-Server OAuth app and deploy `supabase/functions/create-zoom-meeting`. Set these Edge Function secrets:
+To create shared Zoom meetings and privately verify attendance, run `supabase/migration_zoom_verified_attendance.sql`, create a Zoom Server-to-Server OAuth app, and deploy `supabase/functions/create-zoom-meeting` and `supabase/functions/zoom-attendance-webhook`. Set these Edge Function secrets:
 ```bash
 supabase secrets set ZOOM_ACCOUNT_ID=your-account-id ZOOM_CLIENT_ID=your-client-id ZOOM_CLIENT_SECRET=your-client-secret
+supabase secrets set ZOOM_WEBHOOK_SECRET_TOKEN=your-webhook-secret-token
 supabase functions deploy create-zoom-meeting
+supabase functions deploy zoom-attendance-webhook
 ```
-The app creates one Zoom meeting through the server and shares the browser join link in the conversation. Do not put Zoom credentials in `.env` or frontend code.
+Configure the Zoom webhook URL as `https://YOUR_PROJECT_REF.supabase.co/functions/v1/zoom-attendance-webhook` and subscribe to `meeting.participant_joined` and `meeting.participant_left`. Participants must sign in to Zoom using the same verified email address as their Stup account. Attendance, join times, and reward state remain server-only; the browser receives only the join link. The private database migration schedules a server-side check every minute and awards the helper one session after 10 minutes of simultaneous verified attendance. Do not put Zoom credentials in `.env` or frontend code.
 
 ## 3. Configure and run locally
 ```bash

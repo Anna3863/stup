@@ -1676,7 +1676,9 @@ async function openZoomLink(chatId) {
     let data;
     let error;
     try {
-      ({ data, error } = await supabase.functions.invoke('create-zoom-meeting'));
+    ({ data, error } = await supabase.functions.invoke('create-zoom-meeting', {
+      body: { conversation_id: chatId }
+    }));
     } catch (requestError) {
       toast(`Could not reach the Zoom service: ${requestError.message || 'Request failed.'}`);
       return;
