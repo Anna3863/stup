@@ -5,6 +5,9 @@ import './ora-search.css';
 import './features.css';
 import './keyboard.css';
 import logoMark from './galbui.png';
+import whatsappAdOne from './WhatsApp Image 2026-10-19 at 19.15.51.jpeg';
+import whatsappAdTwo from './WhatsApp Image 2026-10-19 at 18.39.54.jpeg';
+import whatsappAdThree from './WhatsApp Image 2026-10-16 at 21.54.51.jpeg';
 
 const SUBJECTS = ['Romanian language and literature','Mathematics','Physics','Chemistry','Biology','History','Geography','Computer science','ICT','English','French','German','Spanish','Latin','Logic','Psychology','Philosophy','Economics','Social education','Art','Music','Physical education','Religion','Technology','Natural sciences','Entrepreneurship'];
 const LEVELS = ['Middle school','High school','University'];
@@ -51,6 +54,12 @@ const SESSION_OFFERS = [
 const BLOCKED_COMMENT_WORDS = /(?:idiot|stupid|hate you|prost|tâmpit|fuck|shit)/i;
 const PROFILE_SELECT = 'id,display_name,school_level,county,main_subject,subject_ratings,bio,lumen_balance,verified,owner,passport_photo_url,profile_photo_url,created_at';
 const PROFILE_SELECT_LEGACY = 'id,display_name,school_level,county,main_subject,created_at';
+const DISCOVER_AD_IMAGES = [whatsappAdOne, whatsappAdTwo, whatsappAdThree];
+
+function discoverAdvertisementMarkup() {
+  const image = DISCOVER_AD_IMAGES[Math.floor(Math.random() * DISCOVER_AD_IMAGES.length)];
+  return `<aside class="discover-ad" aria-label="Advertisement"><span class="discover-ad-label">Advertisement</span><img src="${escapeHtml(image)}" alt="Advertisement" /></aside>`;
+}
 
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({
@@ -884,6 +893,7 @@ function renderDiscover() {
               <button class="btn" data-start-chat="${escapeHtml(person.id)}">Message</button>
             </div>
           </article>
+          ${(index + 1) % 4 === 0 ? discoverAdvertisementMarkup() : ''}
         `;
       }).join('') : `
         <section class="card empty">
