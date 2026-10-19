@@ -133,8 +133,14 @@ Deno.serve(async (request) => {
       requester_email_hash: await emailHash(requester.data.user.email),
       helper_email_hash: await emailHash(helper.data.user.email)
     });
-    if (attendanceError) throw attendanceError;
-    return jsonResponse({ join_url: browserJoinUrl });
+    if (attendanceError && !/relation .* does not exist|schema cache|could not find/i.test(attendanceError.message || '')) {
+      throw attendanceError;
+    }
+    return jsonResponse({
+      join_url: browserJoinUrl,
+      attendance_tracking: !attendanceError,
+      ...(attendanceError ? { warning: 'Run migration_zoom_verified_attendance.sql to enable session rewards.' } : {})
+    });
   } catch (error) {
     return jsonResponse({ error: errorText(error) }, 500);
   }

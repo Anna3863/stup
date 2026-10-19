@@ -1752,7 +1752,8 @@ async function openZoomLink(chatId) {
       return;
     }
     if (error || !data?.join_url) {
-      toast(error?.message || data?.error || 'Could not create the Zoom meeting.');
+      const serverMessage = data?.error || error?.context?.error || error?.message;
+      toast(serverMessage || 'Could not create the Zoom meeting.');
       return;
     }
     zoomUrl = data.join_url;
