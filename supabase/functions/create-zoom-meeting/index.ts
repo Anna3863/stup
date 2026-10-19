@@ -19,7 +19,15 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 function errorText(value: unknown) {
-  return value instanceof Error ? value.message : String(value);
+  if (value instanceof Error) return value.message;
+  if (value && typeof value === 'object') {
+    const objectValue = value as { message?: unknown; error?: unknown; error_description?: unknown };
+    if (typeof objectValue.message === 'string') return objectValue.message;
+    if (typeof objectValue.error_description === 'string') return objectValue.error_description;
+    if (typeof objectValue.error === 'string') return objectValue.error;
+    try { return JSON.stringify(value); } catch { return 'Unknown error'; }
+  }
+  return String(value);
 }
 
 async function getZoomAccessToken() {
@@ -123,8 +131,13 @@ Deno.serve(async (request) => {
         const meeting = await meetingResponse.json();
         const joinUrl = participantJoinUrl(String(meeting.join_url || conversation.zoom_join_url));
         await supabase.from('conversations').update({ zoom_join_url: joinUrl }).eq('id', conversationId);
+      try {
         const message = await ensureZoomMessage(conversationId, authUser.user.id, `Zoom link: ${joinUrl}`);
         return jsonResponse({ join_url: joinUrl, message_id: message.id, message_created_at: message.created_at });
+      } catch (messageError) {
+        console.error('Could not persist existing Zoom link message:', messageError);
+        return jsonResponse({ join_url: joinUrl, message_error: errorText(messageError) });
+      }
       }
       const meetingError = await meetingResponse.text();
       if (!/3001|meeting does not exist|not found/i.test(meetingError)) {
@@ -183,7 +196,13 @@ Deno.serve(async (request) => {
     if (attendanceError && !/relation .* does not exist|schema cache|could not find/i.test(attendanceError.message || '')) {
       throw attendanceError;
     }
-    const message = await ensureZoomMessage(conversationId, authUser.user.id, `Zoom link: ${browserJoinUrl}`);
+    let message;
+    try {
+      message = await ensureZoomMessage(conversationId, authUser.user.id, `Zoom link: ${browserJoinUrl}`);
+    } catch (messageError) {
+      console.error('Could not persist new Zoom link message:', messageError);
+      return jsonResponse({ join_url: browserJoinUrl, message_error: errorText(messageError) });
+    }
     return jsonResponse({
       join_url: browserJoinUrl,
       message_id: message.id,
