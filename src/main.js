@@ -1710,13 +1710,37 @@ async function openZoomLink(chatId) {
   }
   const zoomUrl = data.join_url;
   openZoomInBrowser(zoomUrl, popup);
-  chat.messages.push({ sender: state.profile.id, text: `Zoom link: ${zoomUrl}` });
-  chat.lastUpdated = Date.now();
-  saveLocalState();
-  if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-')) {
-    supabase.from('messages').insert({ conversation_id: chatId, sender_id: state.profile.id, body: `Zoom link: ${zoomUrl}` })
-      .then(({ error: messageError }) => { if (messageError) toast(messageError.message || 'The meeting link was not sent.'); });
+  const messageText = `Zoom link: ${zoomUrl}`;
+  if (!configured || !supabase || !state.session?.user || String(chatId).startsWith('chat-')) {
+    toast('Zoom opened, but this local chat cannot send the link to another person.');
+    return;
   }
+
+  let messageData;
+  try {
+    const { data: insertedMessage, error: messageError } = await supabase
+      .from('messages')
+      .insert({ conversation_id: chatId, sender_id: state.profile.id, body: messageText })
+      .select('id,created_at')
+      .single();
+    if (messageError) throw messageError;
+    messageData = insertedMessage;
+  } catch (messageError) {
+    toast(`Zoom opened, but the link could not be sent: ${messageError.message || 'Message failed.'}`);
+    return;
+  }
+
+  chat.messages.push({
+    id: messageData?.id,
+    sender: state.profile.id,
+    text: messageText,
+    status: 'delivered',
+    createdAt: messageData?.created_at || new Date().toISOString(),
+    read: false
+  });
+  chat.lastUpdated = messageData?.created_at || Date.now();
+  saveLocalState();
+  toast('Zoom opened and the link was sent.');
   renderInbox();
 }
 
