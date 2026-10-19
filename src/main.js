@@ -648,6 +648,7 @@ async function fetchConversations() {
     const isGroup = Boolean(conversation?.is_group);
     const accepted = isGroup || requesterId === state.profile.id || Boolean(currentMember?.accepted_at);
     const partnerReadAt = memberRows.find((row) => row.user_id === partnerId)?.last_read_at;
+    const remoteMessageById = new Map(remoteMessages.map((row) => [row.id, row]));
     return { id, title: conversation?.title || '', isGroup, participants, status: accepted ? 'active' : 'pending',
       accepted, requesterId, createdBy: conversation?.created_by || requesterId,
       groupPhotoUrl: conversation?.group_photo_url || '',
@@ -661,7 +662,7 @@ async function fetchConversations() {
       messages: remoteMessages.map((row) => {
         const isMine = row.sender_id === state.profile.id;
         const partnerHasRead = Boolean(isMine && partnerReadAt && new Date(partnerReadAt).getTime() >= new Date(row.created_at).getTime());
-        return { id: row.id, sender: row.sender_id, text: row.body, createdAt: row.created_at, edited: Boolean(row.edited_at), replyToId: row.reply_to_id, status: partnerHasRead ? 'read' : 'delivered', read: !isMine };
+        return { id: row.id, sender: row.sender_id, text: row.body, createdAt: row.created_at, edited: Boolean(row.edited_at), replyToId: row.reply_to_id, replyToText: row.reply_to_id ? (remoteMessageById.get(row.reply_to_id)?.body || '') : '', status: partnerHasRead ? 'read' : 'delivered', read: !isMine };
       }),
       lastUpdated: remoteMessages.at(-1)?.created_at || Date.now(),
       session: { date: '', method: 'online', completed: false } };
@@ -735,7 +736,8 @@ function subscribeToMessages() {
         && state.activeChatId === chat.id
         && visibleMessages
         && visibleMessages.scrollHeight - visibleMessages.clientHeight - visibleMessages.scrollTop < 64;
-      chat.messages.push({ id: row.id, sender: row.sender_id, text: row.body, createdAt: row.created_at, status: 'delivered', read: activeAtBottom, replyToId: row.reply_to_id });
+      const repliedMessage = row.reply_to_id ? chat.messages.find((message) => message.id === row.reply_to_id) : null;
+      chat.messages.push({ id: row.id, sender: row.sender_id, text: row.body, createdAt: row.created_at, status: 'delivered', read: activeAtBottom, replyToId: row.reply_to_id, replyToText: repliedMessage?.text || '' });
       chat.unreadCount = (chat.unreadCount || 0) + 1;
       chat.lastUpdated = row.created_at;
       saveLocalState();
