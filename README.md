@@ -23,7 +23,7 @@ supabase secrets set ZOOM_WEBHOOK_SECRET_TOKEN=your-webhook-secret-token
 supabase functions deploy create-zoom-meeting
 supabase functions deploy zoom-attendance-webhook
 ```
-Configure the Zoom webhook URL as `https://YOUR_PROJECT_REF.supabase.co/functions/v1/zoom-attendance-webhook` and subscribe to `meeting.participant_joined` and `meeting.participant_left`. Participants must sign in to Zoom using the same verified email address as their Stup account. Attendance, join times, and reward state remain server-only; the browser receives only the join link. The private database migration schedules a server-side check every minute and currently awards the helper one session after 1 minute of simultaneous verified attendance for testing. Restore the threshold to 10 minutes before production. Do not put Zoom credentials in `.env` or frontend code.
+Configure the Zoom webhook URL as `https://YOUR_PROJECT_REF.supabase.co/functions/v1/zoom-attendance-webhook` and subscribe to `meeting.participant_joined` and `meeting.participant_left`. Participants must sign in to Zoom using the same verified email address as their Stup account. Attendance, join times, and reward state remain server-only; the browser receives only the join link. The helped/requesting student is charged one session on their first join; after both participants are present together for at least 1 second, the helper receives one session. Restore the threshold to 10 minutes before production. Do not put Zoom credentials in `.env` or frontend code.
 
 ## 3. Configure and run locally
 ```bash

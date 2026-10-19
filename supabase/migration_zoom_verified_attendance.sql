@@ -50,6 +50,7 @@ create table if not exists public.zoom_session_attendance (
   helper_id uuid not null references public.profiles(id) on delete cascade,
   requester_email_hash text not null,
   helper_email_hash text not null,
+  charged_at timestamptz,
   requester_in_meeting boolean not null default false,
   helper_in_meeting boolean not null default false,
   shared_started_at timestamptz,
@@ -58,6 +59,7 @@ create table if not exists public.zoom_session_attendance (
   created_at timestamptz not null default now(),
   check (requester_id <> helper_id)
 );
+alter table public.zoom_session_attendance add column if not exists charged_at timestamptz;
 alter table public.zoom_session_attendance enable row level security;
 revoke all on public.zoom_session_attendance from public, anon, authenticated;
 
@@ -77,6 +79,7 @@ declare
   is_requester boolean;
   both_were_present boolean;
   elapsed integer;
+  charged_user_id uuid;
 begin
   if p_event not in ('meeting.participant_joined', 'meeting.participant_left') then
     return;
@@ -100,6 +103,15 @@ begin
   end if;
 
   if p_event = 'meeting.participant_joined' then
+    -- The requester is the helped student: charge one session exactly once
+    -- when they enter. The helper is rewarded only after shared attendance.
+    if is_requester and attendance.charged_at is null then
+      update public.profiles
+      set lumen_balance = lumen_balance - 1
+      where id = attendance.requester_id and lumen_balance > 0
+      returning id into charged_user_id;
+      if charged_user_id is not null then attendance.charged_at := p_event_at; end if;
+    end if;
     if is_requester then
       attendance.requester_in_meeting := true;
     else
@@ -119,7 +131,7 @@ begin
     attendance.shared_started_at := null;
   end if;
 
-  if attendance.rewarded_at is null and attendance.shared_seconds >= 60 then
+  if attendance.charged_at is not null and attendance.rewarded_at is null and attendance.shared_seconds >= 1 then
     update public.profiles
     set lumen_balance = lumen_balance + 1
     where id = attendance.helper_id;
@@ -129,6 +141,7 @@ begin
   update public.zoom_session_attendance
   set requester_in_meeting = attendance.requester_in_meeting,
       helper_in_meeting = attendance.helper_in_meeting,
+      charged_at = attendance.charged_at,
       shared_started_at = attendance.shared_started_at,
       shared_seconds = attendance.shared_seconds,
       rewarded_at = attendance.rewarded_at
@@ -154,14 +167,15 @@ begin
       and requester_in_meeting
       and helper_in_meeting
       and shared_started_at is not null
-      and shared_started_at <= now() - interval '1 minute'
+      and shared_started_at <= now() - interval '1 second'
     for update
   loop
     elapsed := greatest(0, floor(extract(epoch from (now() - attendance.shared_started_at)))::integer);
-    if attendance.shared_seconds + elapsed >= 60 then
+    if attendance.charged_at is not null and attendance.shared_seconds + elapsed >= 1 then
       update public.profiles set lumen_balance = lumen_balance + 1 where id = attendance.helper_id;
       update public.zoom_session_attendance
-      set shared_seconds = attendance.shared_seconds + elapsed,
+      set charged_at = attendance.charged_at,
+          shared_seconds = attendance.shared_seconds + elapsed,
           rewarded_at = now()
       where id = attendance.id and rewarded_at is null;
     end if;
