@@ -134,6 +134,20 @@ function saveLocalState() {
   }));
 }
 
+function isEmailVerified(user) {
+  return Boolean(user?.email_confirmed_at || user?.confirmed_at);
+}
+
+async function rejectUnverifiedSession(session) {
+  if (!session?.user || isEmailVerified(session.user)) return false;
+
+  await supabase.auth.signOut();
+  state.session = null;
+  state.profile = null;
+  toast('Please verify your email before logging in.');
+  return true;
+}
+
 function levelName(level) {
   return LEVELS[Number(level)] || 'High school';
 }
@@ -2002,30 +2016,14 @@ function authScreen(mode = 'signup') {
           const userId = data?.user?.id;
           if (userId) {
             if (!data.session) {
-              const localUser = {
-                id: `local-${Date.now()}`,
-                display_name,
-                school_level,
-                county,
-                main_subject: 'Mathematics',
-                subject_ratings: {},
-                bio: '',
-                lumen_balance: DEFAULT_SESSIONS,
-                verified: false,
-                owner: false,
-                passport_photo_url: '',
-                profile_photo_url: '',
-                password,
-                email,
-                sessions: 0
-              };
-              state.localUsers.push(localUser);
-              state.profile = { ...localUser };
-              state.people = state.localUsers.filter((person) => person.id !== localUser.id);
-              state.view = 'discover';
-              saveLocalState();
-              toast('Email confirmation is not configured, so this demo account was created locally.');
-              render();
+              authScreen('login');
+              toast('Account created. Please verify your email before logging in.');
+              return;
+            }
+            if (!isEmailVerified(data.user)) {
+              await rejectUnverifiedSession(data.session);
+              authScreen('login');
+              toast('Account created. Please verify your email before logging in.');
               return;
             }
             const photoUrl = passportPhoto && passportPhoto.size ? await uploadPassportPhoto(passportPhoto) : '';
@@ -2097,6 +2095,7 @@ function authScreen(mode = 'signup') {
           throw error;
         }
         state.session = data.session;
+        if (await rejectUnverifiedSession(data.session)) return;
         const { data: profileRow, error: profileErr } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
         if (profileErr) throw profileErr;
         if (profileRow) {
@@ -2191,7 +2190,8 @@ async function bootstrap() {
 
   const { data: { session } } = await supabase.auth.getSession();
   state.session = session;
-  if (session) {
+  const rejectedSession = session ? await rejectUnverifiedSession(session) : false;
+  if (session && !rejectedSession) {
     const { data: profileRow, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
     if (!error && profileRow) {
       state.profile = profileRow;
@@ -2205,6 +2205,7 @@ async function bootstrap() {
   }
 
   render();
+  if (rejectedSession) toast('Please verify your email before logging in.');
 }
 
 bootstrap();
