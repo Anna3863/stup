@@ -1661,7 +1661,7 @@ async function openZoomLink(chatId) {
   if (!chat) return;
   const existingMessage = chat.messages.find((message) => message.text?.startsWith('Zoom link: https://'));
   const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '');
-  if (existingUrl) {
+  if (existingMessage?.id && existingUrl) {
     toast('Opening Zoom…');
     openZoomInBrowser(existingUrl);
     return;
@@ -1670,21 +1670,24 @@ async function openZoomLink(chatId) {
     toast('Zoom is not configured. Please deploy the create-zoom-meeting function first.');
     return;
   }
-  toast('Creating Zoom meeting…');
-  let data;
-  let error;
-  try {
-    ({ data, error } = await supabase.functions.invoke('create-zoom-meeting'));
-  } catch (requestError) {
-    toast(`Could not reach the Zoom service: ${requestError.message || 'Request failed.'}`);
-    return;
-  }
-  if (error || !data?.join_url) {
-    toast(error?.message || data?.error || 'Could not create the Zoom meeting.');
-    return;
+  let zoomUrl = existingUrl;
+  if (!zoomUrl) {
+    toast('Creating Zoom meeting…');
+    let data;
+    let error;
+    try {
+      ({ data, error } = await supabase.functions.invoke('create-zoom-meeting'));
+    } catch (requestError) {
+      toast(`Could not reach the Zoom service: ${requestError.message || 'Request failed.'}`);
+      return;
+    }
+    if (error || !data?.join_url) {
+      toast(error?.message || data?.error || 'Could not create the Zoom meeting.');
+      return;
+    }
+    zoomUrl = data.join_url;
   }
 
-  const zoomUrl = data.join_url;
   const messageText = `Zoom link: ${zoomUrl}`;
   if (String(chatId).startsWith('chat-')) {
     toast('This local chat cannot send the Zoom link to another person.');
@@ -1698,6 +1701,9 @@ async function openZoomLink(chatId) {
       .select('id,created_at')
       .single();
     if (messageError) throw messageError;
+    if (existingMessage && !existingMessage.id) {
+      chat.messages = chat.messages.filter((message) => message !== existingMessage);
+    }
     chat.messages.push({
       id: insertedMessage?.id,
       sender: state.profile.id,
