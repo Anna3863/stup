@@ -113,7 +113,13 @@ Deno.serve(async (request) => {
         }
       })
     });
-    if (!response.ok) throw new Error(`Zoom meeting creation returned ${response.status}: ${await response.text()}`);
+    if (!response.ok) {
+      const responseText = await response.text();
+      if (/does not contain scopes|invalid access token/i.test(responseText)) {
+        throw new Error('Zoom OAuth is missing the meeting creation scope. Add meeting:write:meeting (or meeting:write) to the Zoom app, then regenerate its credentials.');
+      }
+      throw new Error(`Zoom meeting creation returned ${response.status}: ${responseText}`);
+    }
 
     const meeting = await response.json();
     if (!meeting.join_url) throw new Error('Zoom did not return a meeting join URL.');
