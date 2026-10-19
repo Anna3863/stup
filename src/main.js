@@ -58,7 +58,7 @@ const DISCOVER_AD_IMAGES = [whatsappAdOne, whatsappAdTwo, whatsappAdThree];
 
 function discoverAdvertisementMarkup() {
   const image = DISCOVER_AD_IMAGES[Math.floor(Math.random() * DISCOVER_AD_IMAGES.length)];
-  return `<aside class="discover-ad" aria-label="Advertisement"><span class="discover-ad-label">Advertisement</span><img src="${escapeHtml(image)}" alt="Advertisement" /></aside>`;
+  return `<aside class="card discover-ad" aria-label="Advertisement"><span class="discover-ad-label">Advertisement</span><img src="${escapeHtml(image)}" alt="Advertisement" /></aside>`;
 }
 
 function escapeHtml(value = '') {
