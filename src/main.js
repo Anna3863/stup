@@ -1674,11 +1674,24 @@ async function openZoomLink(chatId) {
   if (!chat) return;
   const existingMessage = chat.messages.find((message) => message.text?.startsWith('Zoom link: https://'));
   const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '');
+  if (!existingUrl && (!configured || !supabase || !state.session?.user)) {
+    toast('Zoom is not configured. Please deploy the create-zoom-meeting function first.');
+    return;
+  }
   const popup = window.open('about:blank', '_blank');
   if (popup) popup.opener = null;
   if (!existingUrl) {
     if (popup) popup.document.title = 'Creating Zoom meeting…';
-    const { data, error } = await supabase?.functions.invoke('create-zoom-meeting') || {};
+    toast('Creating Zoom meeting…');
+    let data;
+    let error;
+    try {
+      ({ data, error } = await supabase.functions.invoke('create-zoom-meeting'));
+    } catch (requestError) {
+      popup?.close();
+      toast(`Could not reach the Zoom service: ${requestError.message || 'Request failed.'}`);
+      return;
+    }
     if (error || !data?.join_url) {
       popup?.close();
       toast(error?.message || data?.error || 'Could not create the Zoom meeting.');
