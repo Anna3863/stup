@@ -635,7 +635,9 @@ async function fetchConversations() {
       .in('conversation_id', ids)
       .order('created_at'));
   }
+  const previousChats = new Map(state.chats.map((chat) => [chat.id, chat]));
   state.chats = ids.map((id) => {
+    const previousChat = previousChats.get(id);
     const conversation = conversations.find((row) => row.id === id);
     const participants = (allMembers || []).filter((row) => row.conversation_id === id).map((row) => row.user_id);
     const remoteMessages = (messages || []).filter((row) => row.conversation_id === id);
@@ -651,6 +653,10 @@ async function fetchConversations() {
       groupPhotoUrl: conversation?.group_photo_url || '',
       groupAdminIds: memberRows.filter((row) => row.is_admin).map((row) => row.user_id),
       memberAccepted: Object.fromEntries(memberRows.map((row) => [row.user_id, Boolean(row.accepted_at)])),
+      // Keep client-only composer state when background refresh replaces the
+      // server-backed conversation object.
+      replyTo: previousChat?.replyTo || null,
+      editingMessageKey: previousChat?.editingMessageKey || null,
       zoomMeetingId: conversation?.zoom_meeting_id || '', zoomJoinUrl: conversation?.zoom_join_url || '',
       messages: remoteMessages.map((row) => {
         const isMine = row.sender_id === state.profile.id;
