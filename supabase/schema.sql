@@ -62,6 +62,8 @@ create table if not exists public.conversations (
   title text,
   is_group boolean not null default false,
   requester_id uuid references public.profiles(id),
+  created_by uuid references public.profiles(id),
+  group_photo_url text,
   zoom_meeting_id text,
   zoom_join_url text,
   created_at timestamptz not null default now()
@@ -69,6 +71,8 @@ create table if not exists public.conversations (
 alter table public.conversations add column if not exists title text;
 alter table public.conversations add column if not exists is_group boolean not null default false;
 alter table public.conversations add column if not exists requester_id uuid references public.profiles(id);
+alter table public.conversations add column if not exists created_by uuid references public.profiles(id);
+alter table public.conversations add column if not exists group_photo_url text;
 alter table public.conversations add column if not exists zoom_meeting_id text;
 alter table public.conversations add column if not exists zoom_join_url text;
 create unique index if not exists conversations_zoom_meeting_id_key
@@ -78,6 +82,8 @@ create table if not exists public.conversation_members (
   conversation_id uuid not null references public.conversations(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
   joined_at timestamptz not null default now(),
+  is_admin boolean not null default false,
+  accepted_at timestamptz,
   primary key (conversation_id, user_id)
 );
 create table if not exists public.messages (
@@ -246,7 +252,7 @@ begin
   limit 1;
   if found_id is not null then return found_id; end if;
   insert into public.conversations(requester_id) values (current_user_id) returning id into new_id;
-  insert into public.conversation_members(conversation_id,user_id) values (new_id,current_user_id),(new_id,other_user);
+  insert into public.conversation_members(conversation_id,user_id,accepted_at) values (new_id,current_user_id,now()),(new_id,other_user);
   return new_id;
 end;
 $$;
@@ -269,9 +275,15 @@ begin
   selected_ids := array(select distinct id from unnest(coalesce(member_ids, '{}')) id where id <> current_user_id);
   if coalesce(array_length(selected_ids, 1), 0) < 1 then raise exception 'Choose at least one other student'; end if;
   if exists (select 1 from unnest(selected_ids) id where not exists (select 1 from public.profiles where profiles.id = id)) then raise exception 'One or more students were not found'; end if;
-  insert into public.conversations(title, is_group) values (trim(group_name), true) returning id into new_id;
-  insert into public.conversation_members(conversation_id, user_id) values (new_id, current_user_id);
-  insert into public.conversation_members(conversation_id, user_id) select new_id, id from unnest(selected_ids) id;
+  if exists (select 1 from unnest(selected_ids) selected_id where not exists (
+    select 1
+    from public.conversations direct_conversation
+    join public.conversation_members accepted_member on accepted_member.conversation_id = direct_conversation.id and accepted_member.user_id = selected_id
+    where not direct_conversation.is_group and direct_conversation.requester_id = current_user_id and accepted_member.accepted_at is not null
+  )) then raise exception 'You can only add students who accepted your message request'; end if;
+  insert into public.conversations(title, is_group, requester_id, created_by) values (trim(group_name), true, current_user_id, current_user_id) returning id into new_id;
+  insert into public.conversation_members(conversation_id, user_id, is_admin, accepted_at) values (new_id, current_user_id, true, now());
+  insert into public.conversation_members(conversation_id, user_id, accepted_at) select new_id, id, now() from unnest(selected_ids) id;
   return new_id;
 end;
 $$;

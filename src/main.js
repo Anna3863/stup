@@ -348,6 +348,11 @@ function avatarMarkup(person, className = '') {
   return `<div class="avatar ${photoUrl ? 'has-photo' : ''} ${className}">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" alt="" />` : escapeHtml(initials(person?.display_name || 'S'))}</div>`;
 }
 
+function groupAvatarMarkup(chat, className = '') {
+  const photoUrl = chat?.groupPhotoUrl || '';
+  return `<div class="group-thread-icon ${className}">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" alt="" />` : '<span aria-hidden="true">👥</span>'}</div>`;
+}
+
 function trustBadge(person) {
   if (person?.owner) return '<span class="owner-badge" title="Platform owner" aria-label="Platform owner">♛</span>';
   return person?.verified ? '<span class="verified" title="Passport photo verified" aria-label="Passport photo verified">✓</span>' : '';
@@ -594,12 +599,13 @@ async function fetchConversations() {
   }
   const ids = memberships.map((row) => row.conversation_id);
   let { data: conversations, error: conversationsError } = await supabase.from('conversations')
-    .select('id,title,is_group,requester_id,zoom_meeting_id,zoom_join_url').in('id', ids);
+    .select('id,title,is_group,requester_id,created_by,group_photo_url,zoom_meeting_id,zoom_join_url').in('id', ids);
   if (conversationsError) {
     ({ data: conversations } = await supabase.from('conversations').select('id,title,is_group').in('id', ids));
   }
   if (!conversations) conversations = [];
-  let { data: allMembers, error: membersError } = await supabase.from('conversation_members').select('conversation_id,user_id,last_read_at').in('conversation_id', ids);
+  let { data: allMembers, error: membersError } = await supabase.from('conversation_members')
+    .select('conversation_id,user_id,last_read_at,is_admin,accepted_at').in('conversation_id', ids);
   if (membersError && /last_read_at|column/i.test(membersError.message || '')) {
     ({ data: allMembers } = await supabase.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids));
   }
@@ -634,9 +640,17 @@ async function fetchConversations() {
     const participants = (allMembers || []).filter((row) => row.conversation_id === id).map((row) => row.user_id);
     const remoteMessages = (messages || []).filter((row) => row.conversation_id === id);
     const partnerId = participants.find((participantId) => participantId !== state.profile.id);
-    const partnerReadAt = (allMembers || []).find((row) => row.conversation_id === id && row.user_id === partnerId)?.last_read_at;
-    return { id, title: conversation?.title || '', isGroup: Boolean(conversation?.is_group), participants, status: 'active',
-      requesterId: conversation?.requester_id || state.session.user.id,
+    const memberRows = (allMembers || []).filter((row) => row.conversation_id === id);
+    const currentMember = memberRows.find((row) => row.user_id === state.profile.id);
+    const requesterId = conversation?.requester_id || state.session.user.id;
+    const isGroup = Boolean(conversation?.is_group);
+    const accepted = isGroup || requesterId === state.profile.id || Boolean(currentMember?.accepted_at);
+    const partnerReadAt = memberRows.find((row) => row.user_id === partnerId)?.last_read_at;
+    return { id, title: conversation?.title || '', isGroup, participants, status: accepted ? 'active' : 'pending',
+      accepted, requesterId, createdBy: conversation?.created_by || requesterId,
+      groupPhotoUrl: conversation?.group_photo_url || '',
+      groupAdminIds: memberRows.filter((row) => row.is_admin).map((row) => row.user_id),
+      memberAccepted: Object.fromEntries(memberRows.map((row) => [row.user_id, Boolean(row.accepted_at)])),
       zoomMeetingId: conversation?.zoom_meeting_id || '', zoomJoinUrl: conversation?.zoom_join_url || '',
       messages: remoteMessages.map((row) => {
         const isMine = row.sender_id === state.profile.id;
@@ -1119,9 +1133,13 @@ async function startOrOpenChat(otherUserId) {
 }
 
 async function createGroupStudy() {
-  const people = state.people.length ? state.people : state.localUsers.filter((person) => person.id !== state.profile.id);
+  const acceptedContactIds = new Set(state.chats
+    .filter((chat) => !chat.isGroup && chat.requesterId === state.profile.id && chat.accepted)
+    .flatMap((chat) => chat.participants.filter((personId) => personId !== state.profile.id)));
+  const people = (state.people.length ? state.people : state.localUsers.filter((person) => person.id !== state.profile.id))
+    .filter((person) => acceptedContactIds.has(person.id));
   if (!people.length) {
-    toast('There are no other students to add yet.');
+    toast('Only students who accepted your message request can be added to a group.');
     return;
   }
 
@@ -1138,7 +1156,7 @@ async function createGroupStudy() {
         <div class="group-member-list">
           ${people.map((person) => `<label class="group-member"><input type="checkbox" name="member" value="${escapeHtml(person.id)}" /> <span>${escapeHtml(person.display_name)}</span></label>`).join('')}
         </div>
-        <p class="muted small">Choose at least one other student.</p>
+        <p class="muted small">Only students who accepted your message request are shown.</p>
         <div class="row"><button class="btn" type="submit">Create group</button><button class="btn secondary" type="button" data-group-cancel>Cancel</button></div>
       </form>
     </section>
@@ -1167,7 +1185,7 @@ async function createGroupStudy() {
         if (error) throw error;
         conversationId = data;
       }
-      const newChat = { id: conversationId, title, isGroup: true, participants, status: 'active', requesterId: state.profile.id, messages: [], lastUpdated: Date.now(), session: { date: '', method: 'online', completed: false } };
+      const newChat = { id: conversationId, title, isGroup: true, participants, status: 'active', accepted: true, requesterId: state.profile.id, createdBy: state.profile.id, groupPhotoUrl: '', groupAdminIds: [state.profile.id], memberAccepted: Object.fromEntries(participants.map((id) => [id, true])), messages: [], lastUpdated: Date.now(), session: { date: '', method: 'online', completed: false } };
       state.chats.unshift(newChat);
       state.activeChatId = conversationId;
       state.view = 'inbox';
@@ -1220,7 +1238,7 @@ function renderInbox() {
           const partner = getPersonById(partnerId);
           return `
             <button class="chatitem ${activeChat && activeChat.id === chat.id ? 'selected' : ''}" data-chat-id="${chat.id}">
-              ${chat.isGroup ? '<div class="group-thread-icon small-avatar" aria-hidden="true">👥</div>' : avatarMarkup(partner, 'small-avatar')}
+              ${chat.isGroup ? groupAvatarMarkup(chat, 'small-avatar') : avatarMarkup(partner, 'small-avatar')}
               <span>
                 <b>${escapeHtml(chat.isGroup ? (chat.title || 'Study group') : (partner?.display_name || 'Student'))}</b>
               <small>${chat.isGroup ? `${chat.participants.length} members` : (isPersonActive(partnerId) ? 'Active now' : 'Offline')}${unreadCount(chat) ? ` · <strong class="chat-unread">${unreadCount(chat)} new</strong>` : ''}</small>
@@ -1259,6 +1277,10 @@ function renderInbox() {
 
   document.querySelector('[data-thread-profile]')?.addEventListener('click', () => {
     openProfileModal(document.querySelector('[data-thread-profile]').dataset.threadProfile);
+  });
+  document.querySelector('[data-group-info]')?.addEventListener('click', () => {
+    const chat = state.chats.find((entry) => entry.id === activeChat?.id);
+    if (chat) openGroupDetails(chat);
   });
 
   const messages = document.querySelector('.messages');
@@ -1363,7 +1385,7 @@ function renderThread(chat) {
   const partner = getPersonById(chat.participants.find((personId) => personId !== currentUserId));
   const groupMembers = chat.participants.filter((personId) => personId !== currentUserId).map((personId) => getPersonById(personId)?.display_name || 'Student');
   const threadHeader = chat.isGroup
-    ? `<div class="threadtitle"><div class="group-thread-icon" aria-hidden="true">👥</div><span><b>${escapeHtml(chat.title || 'Study group')}</b><small>${chat.participants.length} members · ${escapeHtml(groupMembers.join(', '))}</small></span></div>`
+    ? `<button class="threadtitle group-thread-profile" type="button" data-group-info aria-label="Open ${escapeHtml(chat.title || 'Study group')} details">${groupAvatarMarkup(chat)}<span><b>${escapeHtml(chat.title || 'Study group')}</b><small>${chat.participants.length} members · ${escapeHtml(groupMembers.join(', '))}</small></span></button>`
     : `<div class="threadtitle"><button class="thread-profile" type="button" data-thread-profile="${escapeHtml(partner?.id || '')}" aria-label="Open ${escapeHtml(partner?.display_name || 'Student')}'s profile">${avatarMarkup(partner)}<span><b>${escapeHtml(partner?.display_name || 'Student')}</b><small class="presence ${isPersonActive(partner?.id) ? 'online' : ''}">${isPersonActive(partner?.id) ? 'Active now' : 'Offline'}</small></span></button></div>`;
 
   let body = `
@@ -1396,6 +1418,16 @@ function renderThread(chat) {
       <button class="jump-latest ${state.threadShowJump ? '' : 'is-hidden'}" type="button" data-jump-latest aria-label="Jump to latest message"><span aria-hidden="true">↓</span>${unreadCount(chat) ? `<b>${unreadCount(chat)} new</b>` : ''}</button>
     </div>
   `;
+
+  if (chat.status === 'pending') {
+    body += `
+      <div class="notice request-notice">
+        <strong>Message request</strong>
+        <p class="muted small">Accept this request to start chatting and become eligible for group invitations.</p>
+        <div class="row"><button class="btn" type="button" data-accept>Accept request</button><button class="btn secondary" type="button" data-decline>Decline</button></div>
+      </div>
+    `;
+  }
 
   if (chat.status === 'active') {
     body += `
@@ -1433,11 +1465,103 @@ function renderThread(chat) {
   return body;
 }
 
-function acceptChat(chatId) {
+async function openGroupDetails(chat) {
+  if (!chat?.isGroup) return;
+  const currentUserId = state.profile.id;
+  const isAdmin = (chat.groupAdminIds || []).includes(currentUserId) || chat.createdBy === currentUserId;
+  const memberPeople = chat.participants.map((personId) => getPersonById(personId) || (personId === currentUserId ? state.profile : null));
+  const modal = document.createElement('div');
+  modal.className = 'profile-modal';
+  modal.innerHTML = `
+    <section class="profile-panel card group-details-panel" role="dialog" aria-modal="true" aria-labelledby="group-details-title">
+      <div class="sessions-heading">
+        <div><span class="eyebrow">Study group</span><h2 id="group-details-title">${escapeHtml(chat.title || 'Study group')}</h2></div>
+        <button class="modal-close" type="button" data-group-details-close aria-label="Close group details"><span aria-hidden="true">×</span></button>
+      </div>
+      ${isAdmin ? `
+        <form class="form group-settings-form" data-group-settings>
+          <label>Group name<input name="title" maxlength="60" required value="${escapeHtml(chat.title || '')}" /></label>
+          <label>Group logo<input name="photo" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+          <button class="btn" type="submit">Save group settings</button>
+        </form>
+      ` : ''}
+      <div class="group-details-members">
+        <strong>Members · ${chat.participants.length}</strong>
+        ${memberPeople.map((person, index) => {
+          const personId = chat.participants[index];
+          const memberIsAdmin = (chat.groupAdminIds || []).includes(personId) || personId === chat.createdBy;
+          return `<div class="group-detail-member">${avatarMarkup(person, 'small-avatar')}<span><b>${escapeHtml(person?.display_name || 'Student')}</b><small>${memberIsAdmin ? 'Admin' : 'Member'}${personId === chat.createdBy ? ' · Creator' : ''}</small></span>${isAdmin && personId !== currentUserId && !memberIsAdmin ? `<button class="btn secondary" type="button" data-make-admin="${escapeHtml(personId)}">Make admin</button>` : ''}</div>`;
+        }).join('')}
+      </div>
+    </section>
+  `;
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  modal.querySelector('[data-group-details-close]').addEventListener('click', close);
+  modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
+
+  modal.querySelector('[data-group-settings]')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const title = String(new FormData(form).get('title') || '').trim();
+    const photo = form.querySelector('input[name="photo"]').files?.[0];
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      let photoUrl = null;
+      if (photo) photoUrl = await uploadProfilePhoto(photo, currentUserId);
+      if (configured && supabase && state.session?.user && !String(chat.id).startsWith('group-')) {
+        const { error } = await supabase.rpc('update_group_conversation', { target_conversation: chat.id, group_title: title, group_photo: photoUrl });
+        if (error) throw error;
+      }
+      chat.title = title;
+      if (photoUrl) chat.groupPhotoUrl = photoUrl;
+      saveLocalState();
+      close();
+      renderInbox();
+      toast('Group settings saved.');
+    } catch (error) {
+      submit.disabled = false;
+      toast(error.message || 'Could not update the group.');
+    }
+  });
+
+  modal.querySelectorAll('[data-make-admin]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const targetUser = button.dataset.makeAdmin;
+      button.disabled = true;
+      if (configured && supabase && state.session?.user && !String(chat.id).startsWith('group-')) {
+        const { error } = await supabase.rpc('set_group_admin', { target_conversation: chat.id, target_user: targetUser, make_admin: true });
+        if (error) {
+          button.disabled = false;
+          toast(error.message || 'Could not make this member an admin.');
+          return;
+        }
+      }
+      chat.groupAdminIds = [...new Set([...(chat.groupAdminIds || []), targetUser])];
+      saveLocalState();
+      close();
+      openGroupDetails(chat);
+    });
+  });
+}
+
+async function acceptChat(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
+  if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-')) {
+    const { error } = await supabase.rpc('accept_conversation_request', { target_conversation: chatId });
+    if (error) {
+      toast(error.message || 'Could not accept this message request.');
+      return;
+    }
+  }
   chat.status = 'active';
-  chat.messages.push({ sender: state.profile.id, text: 'Accepted — let\'s study together.' });
+  chat.accepted = true;
+  chat.memberAccepted = { ...(chat.memberAccepted || {}), [state.profile.id]: true };
+  if (!chat.messages.some((message) => message.text === 'Accepted — let\'s study together.')) {
+    chat.messages.push({ sender: state.profile.id, text: 'Accepted — let\'s study together.' });
+  }
   saveLocalState();
   render();
 }
