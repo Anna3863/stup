@@ -520,7 +520,14 @@ async function uploadProfilePhoto(file, userId) {
 
 async function fetchPeople() {
   if (configured && supabase) {
-    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    let { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    // Keep discovery working when an older Supabase project has not received
+    // one of the newer profile columns yet.
+    if (error) {
+      ({ data, error } = await supabase.from('profiles')
+        .select('id,display_name,school_level,county,main_subject,subject_ratings,bio,lumen_balance,verified,owner,passport_photo_url,created_at')
+        .order('created_at', { ascending: false }));
+    }
     if (!error) {
       state.people = (data || []).filter((person) => person.id !== state.profile?.id);
       return;
@@ -558,9 +565,17 @@ async function fetchConversations() {
   if (!configured || !supabase || !state.session?.user) return;
   const { data: memberships, error } = await supabase.from('conversation_members')
     .select('conversation_id,user_id').eq('user_id', state.session.user.id);
-  if (error || !memberships?.length) return;
+  if (error) return;
+  if (!memberships?.length) {
+    state.chats = [];
+    return;
+  }
   const ids = memberships.map((row) => row.conversation_id);
-  let { data: conversations } = await supabase.from('conversations').select('id,title,is_group').in('id', ids);
+  let { data: conversations, error: conversationsError } = await supabase.from('conversations')
+    .select('id,title,is_group,requester_id,zoom_meeting_id,zoom_join_url').in('id', ids);
+  if (conversationsError) {
+    ({ data: conversations } = await supabase.from('conversations').select('id,title,is_group').in('id', ids));
+  }
   if (!conversations) conversations = [];
   let { data: allMembers, error: membersError } = await supabase.from('conversation_members').select('conversation_id,user_id,last_read_at').in('conversation_id', ids);
   if (membersError && /last_read_at|column/i.test(membersError.message || '')) {
@@ -568,9 +583,14 @@ async function fetchConversations() {
   }
   const participantIds = [...new Set((allMembers || []).map((row) => row.user_id).filter(Boolean))];
   if (participantIds.length) {
-    const { data: participantProfiles } = await supabase.from('profiles')
+    let { data: participantProfiles, error: participantProfilesError } = await supabase.from('profiles')
       .select('id,display_name,school_level,county,main_subject,subject_ratings,bio,lumen_balance,verified,owner,passport_photo_url,profile_photo_url,created_at')
       .in('id', participantIds);
+    if (participantProfilesError) {
+      ({ data: participantProfiles } = await supabase.from('profiles')
+        .select('id,display_name,school_level,county,main_subject,subject_ratings,bio,lumen_balance,verified,owner,passport_photo_url,created_at')
+        .in('id', participantIds));
+    }
     if (participantProfiles?.length) {
       const profileById = new Map(state.people.map((person) => [person.id, person]));
       participantProfiles.forEach((person) => profileById.set(person.id, person));
@@ -593,7 +613,9 @@ async function fetchConversations() {
     const remoteMessages = (messages || []).filter((row) => row.conversation_id === id);
     const partnerId = participants.find((participantId) => participantId !== state.profile.id);
     const partnerReadAt = (allMembers || []).find((row) => row.conversation_id === id && row.user_id === partnerId)?.last_read_at;
-    return { id, title: conversation?.title || '', isGroup: Boolean(conversation?.is_group), participants, status: 'active', requesterId: state.session.user.id,
+    return { id, title: conversation?.title || '', isGroup: Boolean(conversation?.is_group), participants, status: 'active',
+      requesterId: conversation?.requester_id || state.session.user.id,
+      zoomMeetingId: conversation?.zoom_meeting_id || '', zoomJoinUrl: conversation?.zoom_join_url || '',
       messages: remoteMessages.map((row) => {
         const isMine = row.sender_id === state.profile.id;
         const partnerHasRead = Boolean(isMine && partnerReadAt && new Date(partnerReadAt).getTime() >= new Date(row.created_at).getTime());
@@ -678,6 +700,13 @@ function subscribeToMessages() {
       if (state.view === 'inbox') renderInbox();
     })
     .subscribe();
+}
+
+function refreshInboxFromServer() {
+  if (!configured || !supabase || !state.session?.user || !state.profile) return;
+  fetchConversations().then(() => {
+    if (state.view === 'inbox') renderInbox();
+  });
 }
 
 function subscribeToPresence() {
@@ -1675,7 +1704,7 @@ async function openZoomLink(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
   const existingMessage = chat.messages.find((message) => message.text?.startsWith('Zoom link: https://'));
-  const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '');
+  const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '') || chat.zoomJoinUrl;
   if (existingMessage?.id && existingUrl) {
     toast('Opening Zoom…');
     openZoomInBrowser(existingUrl);
@@ -1729,6 +1758,7 @@ async function openZoomLink(chatId) {
       createdAt: insertedMessage?.created_at || new Date().toISOString(),
       read: false
     });
+    chat.zoomJoinUrl = zoomUrl;
     chat.lastUpdated = insertedMessage?.created_at || Date.now();
     saveLocalState();
     openZoomInBrowser(zoomUrl);
@@ -2284,6 +2314,13 @@ async function bootstrap() {
   window.addEventListener('load', scrollInitialThreadToBottom, { once: true });
   window.addEventListener('pageshow', scrollInitialThreadToBottom, { once: true });
   readLocalState();
+  // Realtime is optional in Supabase projects. Refreshing on focus/returning
+  // to the tab ensures messages still appear when the realtime publication
+  // or websocket connection is unavailable.
+  window.addEventListener('focus', refreshInboxFromServer);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshInboxFromServer();
+  });
   if (!configured || !supabase) {
     state.view = 'discover';
     await fetchPeople();
