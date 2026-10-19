@@ -1468,7 +1468,11 @@ function renderThread(chat) {
 async function openGroupDetails(chat) {
   if (!chat?.isGroup) return;
   const currentUserId = state.profile.id;
-  const isAdmin = (chat.groupAdminIds || []).includes(currentUserId) || chat.createdBy === currentUserId;
+  const isAdmin = (chat.groupAdminIds || []).includes(currentUserId)
+    || chat.createdBy === currentUserId
+    // Legacy groups may have no admin row; the server promotes the first
+    // member who opens settings so the group can be repaired safely.
+    || (chat.groupAdminIds || []).length === 0;
   const memberPeople = chat.participants.map((personId) => getPersonById(personId) || (personId === currentUserId ? state.profile : null));
   const modal = document.createElement('div');
   modal.className = 'profile-modal';

@@ -105,6 +105,12 @@ set search_path = public
 as $$
 begin
   if auth.uid() is null then raise exception 'You must be signed in'; end if;
+  -- Legacy groups were created before admin metadata existed. Let a member
+  -- claim admin once so the group can be repaired without manual ID lookup.
+  if not exists (select 1 from public.conversation_members where conversation_id = target_conversation and is_admin) then
+    update public.conversation_members set is_admin = true
+    where conversation_id = target_conversation and user_id = auth.uid();
+  end if;
   if not exists (
     select 1 from public.conversation_members
     where conversation_id = target_conversation and user_id = auth.uid() and is_admin
@@ -125,6 +131,10 @@ set search_path = public
 as $$
 begin
   if auth.uid() is null then raise exception 'You must be signed in'; end if;
+  if not exists (select 1 from public.conversation_members where conversation_id = target_conversation and is_admin) then
+    update public.conversation_members set is_admin = true
+    where conversation_id = target_conversation and user_id = auth.uid();
+  end if;
   if not exists (
     select 1 from public.conversation_members
     where conversation_id = target_conversation and user_id = auth.uid() and is_admin
