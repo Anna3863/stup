@@ -47,6 +47,26 @@ async function emailHash(email: string) {
   return Array.from(new Uint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+async function ensureZoomMessage(conversationId: string, senderId: string, body: string) {
+  const { data: existing, error: lookupError } = await supabase
+    .from('messages')
+    .select('id,created_at')
+    .eq('conversation_id', conversationId)
+    .eq('sender_id', senderId)
+    .eq('body', body)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existing) return existing;
+
+  const { data: inserted, error: insertError } = await supabase
+    .from('messages')
+    .insert({ conversation_id: conversationId, sender_id: senderId, body })
+    .select('id,created_at')
+    .single();
+  if (insertError) throw insertError;
+  return inserted;
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
@@ -91,7 +111,12 @@ Deno.serve(async (request) => {
     if (!requester.data.user?.email || !helper.data.user?.email) throw new Error('Both participants need verified email addresses.');
 
     if (conversation.zoom_meeting_id && conversation.zoom_join_url) {
-      return jsonResponse({ join_url: conversation.zoom_join_url });
+      const message = await ensureZoomMessage(
+        conversationId,
+        authUser.user.id,
+        `Zoom link: ${conversation.zoom_join_url}`
+      );
+      return jsonResponse({ join_url: conversation.zoom_join_url, message_id: message.id, message_created_at: message.created_at });
     }
 
     const zoomToken = await getZoomAccessToken();
@@ -146,8 +171,11 @@ Deno.serve(async (request) => {
     if (attendanceError && !/relation .* does not exist|schema cache|could not find/i.test(attendanceError.message || '')) {
       throw attendanceError;
     }
+    const message = await ensureZoomMessage(conversationId, authUser.user.id, `Zoom link: ${browserJoinUrl}`);
     return jsonResponse({
       join_url: browserJoinUrl,
+      message_id: message.id,
+      message_created_at: message.created_at,
       attendance_tracking: !attendanceError,
       ...(attendanceError ? { warning: 'Run migration_zoom_verified_attendance.sql to enable session rewards.' } : {})
     });

@@ -1728,7 +1728,7 @@ async function openZoomLink(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
   const existingMessage = chat.messages.find((message) => message.text?.startsWith('Zoom link: https://'));
-  const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '') || chat.zoomJoinUrl;
+  const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '');
   if (existingMessage?.id && existingUrl) {
     toast('Opening Zoom…');
     openZoomInBrowser(existingUrl);
@@ -1739,6 +1739,8 @@ async function openZoomLink(chatId) {
     return;
   }
   let zoomUrl = existingUrl;
+  let hostedMessageId = '';
+  let hostedMessageCreatedAt = '';
   if (!zoomUrl) {
     toast('Creating Zoom meeting…');
     let data;
@@ -1766,6 +1768,8 @@ async function openZoomLink(chatId) {
       return;
     }
     zoomUrl = data.join_url;
+    hostedMessageId = data.message_id || '';
+    hostedMessageCreatedAt = data.message_created_at || '';
   }
 
   const messageText = `Zoom link: ${zoomUrl}`;
@@ -1775,6 +1779,21 @@ async function openZoomLink(chatId) {
   }
 
   try {
+    if (hostedMessageId) {
+      chat.messages.push({
+        id: hostedMessageId,
+        sender: state.profile.id,
+        text: messageText,
+        status: 'delivered',
+        createdAt: hostedMessageCreatedAt || new Date().toISOString(),
+        read: false
+      });
+      chat.zoomJoinUrl = zoomUrl;
+      chat.lastUpdated = hostedMessageCreatedAt || Date.now();
+      saveLocalState();
+      openZoomInBrowser(zoomUrl);
+      return;
+    }
     const { data: insertedMessage, error: messageError } = await supabase
       .from('messages')
       .insert({ conversation_id: chatId, sender_id: state.profile.id, body: messageText })
