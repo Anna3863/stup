@@ -1345,7 +1345,7 @@ function renderThread(chat) {
         </div>
       ` : '<p class="muted meeting-note">Zoom or call to get a point, texting will not result in a session </p>'}
       <div class="row">
-        <button class="btn" data-zoom>Open Zoom</button>
+        <button class="btn" type="button" data-zoom>Open Zoom</button>
       </div>
     `;
   }
@@ -1666,7 +1666,7 @@ function openZoomInBrowser(url, popup = null) {
     return;
   }
   const opened = window.open(browserUrl, '_blank', 'noopener,noreferrer');
-  if (!opened && /Android/i.test(navigator.userAgent || '')) window.location.assign(url);
+  if (!opened) window.location.assign(url);
 }
 
 async function openZoomLink(chatId) {
@@ -1674,42 +1674,50 @@ async function openZoomLink(chatId) {
   if (!chat) return;
   const existingMessage = chat.messages.find((message) => message.text?.startsWith('Zoom link: https://'));
   const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '');
+  if (existingUrl) {
+    toast('Opening Zoom…');
+    openZoomInBrowser(existingUrl);
+    return;
+  }
   if (!existingUrl && (!configured || !supabase || !state.session?.user)) {
     toast('Zoom is not configured. Please deploy the create-zoom-meeting function first.');
     return;
   }
-  const popup = window.open('about:blank', '_blank');
-  if (popup) popup.opener = null;
-  if (!existingUrl) {
-    if (popup) popup.document.title = 'Creating Zoom meeting…';
-    toast('Creating Zoom meeting…');
-    let data;
-    let error;
-    try {
-      ({ data, error } = await supabase.functions.invoke('create-zoom-meeting'));
-    } catch (requestError) {
-      popup?.close();
-      toast(`Could not reach the Zoom service: ${requestError.message || 'Request failed.'}`);
-      return;
+  let popup = null;
+  try {
+    popup = window.open('about:blank', '_blank');
+    if (popup) {
+      popup.opener = null;
+      popup.document.title = 'Creating Zoom meeting…';
     }
-    if (error || !data?.join_url) {
-      popup?.close();
-      toast(error?.message || data?.error || 'Could not create the Zoom meeting.');
-      return;
-    }
-    const zoomUrl = data.join_url;
-    openZoomInBrowser(zoomUrl, popup);
-    chat.messages.push({ sender: state.profile.id, text: `Zoom link: ${zoomUrl}` });
-    chat.lastUpdated = Date.now();
-    saveLocalState();
-    if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-')) {
-      supabase.from('messages').insert({ conversation_id: chatId, sender_id: state.profile.id, body: `Zoom link: ${zoomUrl}` })
-        .then(({ error }) => { if (error) toast(error.message || 'The meeting link was not sent.'); });
-    }
-    renderInbox();
+  } catch {
+    // Popup blockers are handled by opening the returned URL in the current tab.
+  }
+  toast('Creating Zoom meeting…');
+  let data;
+  let error;
+  try {
+    ({ data, error } = await supabase.functions.invoke('create-zoom-meeting'));
+  } catch (requestError) {
+    popup?.close();
+    toast(`Could not reach the Zoom service: ${requestError.message || 'Request failed.'}`);
     return;
   }
-  openZoomInBrowser(existingUrl, popup);
+  if (error || !data?.join_url) {
+    popup?.close();
+    toast(error?.message || data?.error || 'Could not create the Zoom meeting.');
+    return;
+  }
+  const zoomUrl = data.join_url;
+  openZoomInBrowser(zoomUrl, popup);
+  chat.messages.push({ sender: state.profile.id, text: `Zoom link: ${zoomUrl}` });
+  chat.lastUpdated = Date.now();
+  saveLocalState();
+  if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-')) {
+    supabase.from('messages').insert({ conversation_id: chatId, sender_id: state.profile.id, body: `Zoom link: ${zoomUrl}` })
+      .then(({ error: messageError }) => { if (messageError) toast(messageError.message || 'The meeting link was not sent.'); });
+  }
+  renderInbox();
 }
 
 function openReportModal(partnerId, chatId = 'profile') {
