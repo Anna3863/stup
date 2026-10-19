@@ -14,6 +14,19 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 );
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-worker-secret',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+};
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+  });
+}
+
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
@@ -44,6 +57,10 @@ async function sendEmail(to: string, senderName: string, count: number) {
 }
 
 Deno.serve(async (request) => {
+  if (request.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   const workerSecret = Deno.env.get('MESSAGE_NOTIFICATION_WORKER_SECRET');
   const hasWorkerSecret = Boolean(workerSecret && request.headers.get('x-worker-secret') === workerSecret);
   if (!hasWorkerSecret) {
@@ -55,16 +72,16 @@ Deno.serve(async (request) => {
       ? await supabase.auth.getUser(accessToken)
       : { error: new Error('Missing authorization') };
     if (authError) {
-      return new Response('Unauthorized', { status: 401 });
+      return new Response('Unauthorized', { status: 401, headers: corsHeaders });
     }
   }
 
   if (request.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+    return new Response('Method not allowed', { status: 405, headers: corsHeaders });
   }
 
   if (!hasWorkerSecret && !request.headers.get('authorization')) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response('Unauthorized', { status: 401, headers: corsHeaders });
   }
 
   const now = new Date().toISOString();
@@ -76,7 +93,7 @@ Deno.serve(async (request) => {
     .limit(100);
   if (hasWorkerSecret) batchesQuery = batchesQuery.lte('notify_after', now);
   const { data: batches, error } = await batchesQuery;
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) return jsonResponse({ error: error.message }, 500);
 
   let sent = 0;
   let failed = 0;
@@ -110,5 +127,5 @@ Deno.serve(async (request) => {
     }
   }
 
-  return Response.json({ processed: (batches || []).length, sent, failed, errors });
+  return jsonResponse({ processed: (batches || []).length, sent, failed, errors });
 });
