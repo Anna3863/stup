@@ -38,7 +38,8 @@ const state = {
   threadScrollTop: 0,
   threadWasNearBottom: true,
   threadScrollChatId: null,
-  threadInitialScrollPending: false
+  threadInitialScrollPending: false,
+  lastInboxRefreshAt: 0
 };
 
 const DEFAULT_SESSIONS = 3;
@@ -725,6 +726,8 @@ function subscribeToMessages() {
 
 function refreshInboxFromServer() {
   if (!configured || !supabase || !state.session?.user || !state.profile) return;
+  if (Date.now() - state.lastInboxRefreshAt < 2000) return;
+  state.lastInboxRefreshAt = Date.now();
   fetchConversations().then(() => {
     if (state.view === 'inbox') renderInbox();
   });
@@ -1349,6 +1352,10 @@ function renderInbox() {
   if (finishButton) finishButton.addEventListener('click', () => completeSession(activeChat.id));
   if (rateButton) rateButton.addEventListener('click', () => openReviewModal(activeChat.id));
   if (zoomButton) zoomButton.addEventListener('click', () => openZoomLink(activeChat.id));
+  // Realtime delivery can be missed while a phone is backgrounded. Reload the
+  // conversation once when Inbox opens so the recipient sees the persisted
+  // Zoom URL even without a websocket event.
+  refreshInboxFromServer();
 }
 
 function renderThread(chat) {
@@ -1412,8 +1419,9 @@ function renderThread(chat) {
             : '<button class="btn" data-finish>Session complete</button>'}
         </div>
       ` : '<p class="muted meeting-note">Zoom or call to get a session; texting will not result in obtaining or using up one.</p>'}
+      ${chat.zoomJoinUrl ? '<div class="notice"><strong>Zoom session ready</strong><p class="muted small">Use the button below to join the shared session.</p></div>' : ''}
       <div class="row">
-        <button class="btn" type="button" data-zoom>Open Zoom</button>
+        <button class="btn" type="button" data-zoom>Join Zoom session</button>
       </div>
     `;
   }
