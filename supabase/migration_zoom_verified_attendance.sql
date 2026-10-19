@@ -119,7 +119,7 @@ begin
     attendance.shared_started_at := null;
   end if;
 
-  if attendance.rewarded_at is null and attendance.shared_seconds >= 600 then
+  if attendance.rewarded_at is null and attendance.shared_seconds >= 60 then
     update public.profiles
     set lumen_balance = lumen_balance + 1
     where id = attendance.helper_id;
@@ -154,11 +154,11 @@ begin
       and requester_in_meeting
       and helper_in_meeting
       and shared_started_at is not null
-      and shared_started_at <= now() - interval '10 minutes'
+      and shared_started_at <= now() - interval '1 minute'
     for update
   loop
     elapsed := greatest(0, floor(extract(epoch from (now() - attendance.shared_started_at)))::integer);
-    if attendance.shared_seconds + elapsed >= 600 then
+    if attendance.shared_seconds + elapsed >= 60 then
       update public.profiles set lumen_balance = lumen_balance + 1 where id = attendance.helper_id;
       update public.zoom_session_attendance
       set shared_seconds = attendance.shared_seconds + elapsed,
