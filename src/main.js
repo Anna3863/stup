@@ -10,7 +10,6 @@ const SUBJECTS = ['Romanian language and literature','Mathematics','Physics','Ch
 const LEVELS = ['Middle school','High school','University'];
 const COUNTIES = ['București','Cluj','Iași','Brașov','Timiș','Constanța','Sibiu','Arad','Alba','Bihor','Prahova'];
 const STORAGE_KEY = 'stup-local-state-v1';
-const NOTIFICATION_PREF_KEY = 'stup-browser-notifications-v1';
 
 const state = {
   session: null,
@@ -216,45 +215,6 @@ function toast(message) {
   el.classList.add('show');
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => el.classList.remove('show'), 3000);
-}
-
-function browserNotificationsSupported() {
-  return 'Notification' in window;
-}
-
-async function enableBrowserNotifications() {
-  if (!browserNotificationsSupported()) {
-    toast('This browser does not support notifications.');
-    return;
-  }
-
-  const permission = await Notification.requestPermission();
-  if (permission === 'granted') {
-    localStorage.setItem(NOTIFICATION_PREF_KEY, 'enabled');
-    toast('Message notifications enabled.');
-  } else {
-    toast('Notifications were not enabled.');
-  }
-  renderSettings();
-}
-
-function showIncomingMessageNotification(message, chat) {
-  if (!browserNotificationsSupported() || Notification.permission !== 'granted') return;
-  if (document.visibilityState === 'visible' && document.hasFocus()) return;
-
-  const sender = getPersonById(message.sender_id)?.display_name || 'A student';
-  const notification = new Notification(`${sender} sent you a message`, {
-    body: String(message.body || '').slice(0, 140),
-    icon: logoMark,
-    tag: `stup-message-${chat.id}`
-  });
-  notification.onclick = () => {
-    window.focus();
-    state.view = 'inbox';
-    state.activeChatId = chat.id;
-    notification.close();
-    renderInbox();
-  };
 }
 
 function getPersonById(id) {
@@ -699,7 +659,6 @@ function subscribeToMessages() {
       chat.messages.push({ id: row.id, sender: row.sender_id, text: row.body, createdAt: row.created_at, status: 'delivered', read: activeAtBottom, replyToId: row.reply_to_id });
       chat.unreadCount = (chat.unreadCount || 0) + 1;
       chat.lastUpdated = row.created_at;
-      showIncomingMessageNotification(row, chat);
       saveLocalState();
       if (state.view === 'inbox') renderInbox();
     })
@@ -1535,17 +1494,6 @@ async function sendMessage(chatId) {
     if (data?.id) {
       remoteMessageId = data.id;
       remoteCreatedAt = data.created_at;
-      supabase.functions.invoke('process-message-notifications').then(({ data: notification, error: notificationError }) => {
-        if (notificationError) {
-          toast(`Email notification failed: ${notificationError.message || 'Could not run the notification worker.'}`);
-        } else if (!notification?.processed) {
-          toast('Message sent, but no email notification was queued. Run the notification migration.');
-        } else if (notification.failed) {
-          toast(`Email notification failed: ${notification.errors?.[0] || 'Check the notification worker logs.'}`);
-        }
-      }).catch((error) => {
-        toast(`Email notification failed: ${error.message || 'Could not run the notification worker.'}`);
-      });
     }
   }
   const message = {
@@ -1806,13 +1754,6 @@ function renderSettings() {
         </div>
         ${ownReviews.length ? `<div class="own-rating-reviews">${ownReviews.slice(0, 3).map((review) => `<p>“${escapeHtml(review.comment || 'Session rating')}” <span class="review-stars">${'★'.repeat(review.rating)}</span></p>`).join('')}</div>` : ''}
       </div>
-      <div class="card notice">
-        <strong>Message notifications</strong>
-        <p class="muted small">Receive a browser notification when a student messages you while the app is open in another tab or backgrounded.</p>
-        <button class="btn secondary" id="enable-notifications" type="button" ${browserNotificationsSupported() && Notification.permission === 'granted' ? 'disabled' : ''}>
-          ${browserNotificationsSupported() && Notification.permission === 'granted' ? 'Notifications enabled' : 'Enable notifications'}
-        </button>
-      </div>
       <div class="card form">
         <div class="profile-photo-setting">
           ${avatarMarkup(state.profile, 'profile-photo-preview')}
@@ -1862,8 +1803,6 @@ function renderSettings() {
       </div>
     </section>
   `);
-
-  document.querySelector('#enable-notifications')?.addEventListener('click', enableBrowserNotifications);
 
   document.querySelector('#profile-photo').addEventListener('change', (event) => {
     const file = event.target.files[0];

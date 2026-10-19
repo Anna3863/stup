@@ -34,28 +34,25 @@ function escapeHtml(value: string) {
 }
 
 async function sendEmail(to: string, senderName: string, count: number) {
-  const sendGridKey = Deno.env.get('SENDGRID_API_KEY');
+  const brevoKey = Deno.env.get('BREVO_API_KEY');
   const from = Deno.env.get('EMAIL_FROM');
-  if (!sendGridKey || !from) throw new Error('SENDGRID_API_KEY and EMAIL_FROM are required.');
+  if (!brevoKey || !from) throw new Error('BREVO_API_KEY and EMAIL_FROM are required.');
 
   const messageLabel = count === 1 ? 'message' : 'messages';
   const safeName = escapeHtml(senderName);
-  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${sendGridKey}`, 'Content-Type': 'application/json' },
+    headers: { 'api-key': brevoKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      personalizations: [{ to: [{ email: to }] }],
-      from: { email: from },
+      sender: { email: from },
+      to: [{ email: to }],
       subject: `${senderName} sent you ${count} new ${messageLabel}`,
-      content: [{
-        type: 'text/html',
-        value: `<p><strong>${safeName}</strong> sent you <strong>${count}</strong> new ${messageLabel}.</p><p>Open the app to read and reply.</p>`
-      }]
+      htmlContent: `<p><strong>${safeName}</strong> sent you <strong>${count}</strong> new ${messageLabel}.</p><p>Open the app to read and reply.</p>`
     })
   });
   if (!response.ok) {
     const details = await response.text();
-    throw new Error(`SendGrid returned ${response.status}${details ? `: ${details}` : '.'}`);
+    throw new Error(`Brevo returned ${response.status}${details ? `: ${details}` : '.'}`);
   }
 }
 
