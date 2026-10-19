@@ -114,20 +114,24 @@ Deno.serve(async (request) => {
     ]);
     if (!requester.data.user?.email || !helper.data.user?.email) throw new Error('Both participants need verified email addresses.');
 
-    if (conversation.zoom_meeting_id && conversation.zoom_join_url) {
-      const joinUrl = participantJoinUrl(conversation.zoom_join_url);
-      if (joinUrl !== conversation.zoom_join_url) {
-        await supabase.from('conversations').update({ zoom_join_url: joinUrl }).eq('id', conversationId);
-      }
-      const message = await ensureZoomMessage(
-        conversationId,
-        authUser.user.id,
-        `Zoom link: ${joinUrl}`
-      );
-      return jsonResponse({ join_url: joinUrl, message_id: message.id, message_created_at: message.created_at });
-    }
-
     const zoomToken = await getZoomAccessToken();
+    if (conversation.zoom_meeting_id && conversation.zoom_join_url) {
+      const meetingResponse = await fetch(`https://api.zoom.us/v2/meetings/${encodeURIComponent(conversation.zoom_meeting_id)}`, {
+        headers: { Authorization: `Bearer ${zoomToken}` }
+      });
+      if (meetingResponse.ok) {
+        const meeting = await meetingResponse.json();
+        const joinUrl = participantJoinUrl(String(meeting.join_url || conversation.zoom_join_url));
+        await supabase.from('conversations').update({ zoom_join_url: joinUrl }).eq('id', conversationId);
+        const message = await ensureZoomMessage(conversationId, authUser.user.id, `Zoom link: ${joinUrl}`);
+        return jsonResponse({ join_url: joinUrl, message_id: message.id, message_created_at: message.created_at });
+      }
+      const meetingError = await meetingResponse.text();
+      if (!/3001|meeting does not exist|not found/i.test(meetingError)) {
+        throw new Error(`Zoom meeting validation returned ${meetingResponse.status}: ${meetingError}`);
+      }
+      await supabase.from('conversations').update({ zoom_meeting_id: null, zoom_join_url: null }).eq('id', conversationId);
+    }
     // The helper is the teacher and must own/host the meeting. This requires
     // the Zoom app to have meeting:write:admin and the helper to be a user in
     // the same Zoom account as the Server-to-Server OAuth app.

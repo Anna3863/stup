@@ -1728,18 +1728,11 @@ async function openZoomLink(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
   const existingMessage = chat.messages.find((message) => message.text?.startsWith('Zoom link: https://'));
-  const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '')
-    ?.replace(/\/wc\/(\d+)\/join\b/, '/j/$1');
-  if (existingMessage?.id && existingUrl) {
-    toast('Opening Zoom…');
-    openZoomInBrowser(existingUrl);
-    return;
-  }
   if (!configured || !supabase || !state.session?.user) {
     toast('Zoom is not configured. Please deploy the create-zoom-meeting function first.');
     return;
   }
-  let zoomUrl = existingUrl;
+  let zoomUrl = '';
   let hostedMessageId = '';
   let hostedMessageCreatedAt = '';
   if (!zoomUrl) {
@@ -1781,14 +1774,20 @@ async function openZoomLink(chatId) {
 
   try {
     if (hostedMessageId) {
-      chat.messages.push({
-        id: hostedMessageId,
-        sender: state.profile.id,
-        text: messageText,
-        status: 'delivered',
-        createdAt: hostedMessageCreatedAt || new Date().toISOString(),
-        read: false
-      });
+      const localMessage = chat.messages.find((message) => message.text === messageText);
+      if (localMessage) {
+        localMessage.id = hostedMessageId;
+        localMessage.createdAt = hostedMessageCreatedAt || localMessage.createdAt;
+      } else {
+        chat.messages.push({
+          id: hostedMessageId,
+          sender: state.profile.id,
+          text: messageText,
+          status: 'delivered',
+          createdAt: hostedMessageCreatedAt || new Date().toISOString(),
+          read: false
+        });
+      }
       chat.zoomJoinUrl = zoomUrl;
       chat.lastUpdated = hostedMessageCreatedAt || Date.now();
       saveLocalState();
