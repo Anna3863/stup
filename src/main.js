@@ -566,6 +566,17 @@ async function fetchConversations() {
   if (membersError && /last_read_at|column/i.test(membersError.message || '')) {
     ({ data: allMembers } = await supabase.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids));
   }
+  const participantIds = [...new Set((allMembers || []).map((row) => row.user_id).filter(Boolean))];
+  if (participantIds.length) {
+    const { data: participantProfiles } = await supabase.from('profiles')
+      .select('id,display_name,school_level,county,main_subject,subject_ratings,bio,lumen_balance,verified,owner,passport_photo_url,profile_photo_url,created_at')
+      .in('id', participantIds);
+    if (participantProfiles?.length) {
+      const profileById = new Map(state.people.map((person) => [person.id, person]));
+      participantProfiles.forEach((person) => profileById.set(person.id, person));
+      state.people = [...profileById.values()].filter((person) => person.id !== state.profile?.id);
+    }
+  }
   let { data: messages, error: messagesError } = await supabase.from('messages')
     .select('id,conversation_id,sender_id,body,created_at,edited_at,reply_to_id')
     .in('conversation_id', ids)
@@ -647,9 +658,13 @@ function localAISearch(query) {
 function subscribeToMessages() {
   if (!configured || !supabase || !state.session?.user) return;
   supabase.channel(`stup-messages-${state.session.user.id}`)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
       const row = payload.new;
-      const chat = state.chats.find((entry) => entry.id === row.conversation_id);
+      let chat = state.chats.find((entry) => entry.id === row.conversation_id);
+      if (!chat) {
+        await fetchConversations();
+        chat = state.chats.find((entry) => entry.id === row.conversation_id);
+      }
       if (!chat || row.sender_id === state.profile.id) return;
       const visibleMessages = document.querySelector('.messages');
       const activeAtBottom = state.view === 'inbox'
