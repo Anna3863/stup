@@ -848,7 +848,7 @@ function renderDiscover() {
     ` : ''}
 
     <div class="cards">
-      ${filteredPeople.length ? filteredPeople.map((person) => {
+      ${filteredPeople.length ? filteredPeople.map((person, index) => {
         const tags = subjectTags(person, 4);
         const searchSubject = state.searchSubmitted ? (state.searchMode === 'ai' ? person._searchSubject : state.filterSubject) : '';
         if (searchSubject && !tags.some((tag) => tag.subject === searchSubject)) {
