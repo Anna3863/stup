@@ -1294,7 +1294,7 @@ function renderThread(chat) {
               : '<button class="btn" data-rate-session>Rate and comment</button>')
             : '<button class="btn" data-finish>Session complete</button>'}
         </div>
-      ` : '<p class="muted meeting-note">No date booking is needed. Start a Google Meet when you are ready.</p>'}
+      ` : '<p class="muted meeting-note">Meet or call to get a point, texting will not result in a session </p>'}
       <div class="row">
         <button class="btn" data-meet>Open Google Meet</button>
       </div>
