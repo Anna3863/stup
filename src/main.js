@@ -893,7 +893,7 @@ function renderDiscover() {
               <button class="btn" data-start-chat="${escapeHtml(person.id)}">Message</button>
             </div>
           </article>
-          ${(index + 1) % 4 === 0 ? discoverAdvertisementMarkup() : ''}
+          ${(index + 1) % 4 === 0 || index === filteredPeople.length - 1 ? discoverAdvertisementMarkup() : ''}
         `;
       }).join('') : `
         <section class="card empty">
