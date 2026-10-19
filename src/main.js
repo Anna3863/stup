@@ -1656,7 +1656,14 @@ function openMeetLink(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
   const meetUrl = 'https://meet.google.com/new';
-  window.open(meetUrl, '_blank', 'noopener,noreferrer');
+  const isAndroid = /Android/i.test(navigator.userAgent || '');
+  // Android can route meet.google.com links to the Meet app. Target Chrome's
+  // browser explicitly so the meeting is created on the web instead.
+  const browserUrl = isAndroid
+    ? 'intent://meet.google.com/new#Intent;scheme=https;package=com.android.chrome;end'
+    : meetUrl;
+  const opened = window.open(browserUrl, '_blank', 'noopener,noreferrer');
+  if (!opened && isAndroid) window.location.assign(meetUrl);
   const alreadyShared = chat.messages.some((message) => message.text === meetUrl);
   if (!alreadyShared) {
     chat.messages.push({ sender: state.profile.id, text: `Google Meet link: ${meetUrl}` });
