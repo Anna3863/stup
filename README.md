@@ -16,7 +16,12 @@ This is a small, low-cost step toward turning the original `stup_v2.html` protot
 
 If you already created the database from the earlier stup MVP, run `supabase/migration_subject_ratings.sql`, `supabase/migration_profile_reviews.sql`, `supabase/migration_profile_fields.sql`, and `supabase/migration_owner_passport.sql` in SQL Editor. The profile fields migration adds the bio, verification flag, owner flag, and passport-photo URL columns required by profile creation and saving, then asks PostgREST to reload its schema cache. If you still see a `bio` column/schema-cache error, confirm the migration ran successfully and wait briefly for the API cache to refresh before saving again. The profile reviews migration also adds the profile-picture column and configures the `profile-photos` bucket. Do not rerun the full schema on an existing database, because its policies already exist.
 
-For testing message email notifications, run `supabase/migration_message_email_notifications.sql`, deploy `supabase/functions/process-message-notifications`, and set the Edge Function secrets `BREVO_API_KEY` and `EMAIL_FROM`. Verify `EMAIL_FROM` as a sender in Brevo. The app invokes the function after every message is sent, and each message gets its own email immediately. Optionally set `MESSAGE_NOTIFICATION_WORKER_SECRET` and schedule the function once per minute using Supabase Cron or an external scheduler for retries.
+To create shared Zoom meetings from a conversation, create a Zoom Server-to-Server OAuth app and deploy `supabase/functions/create-zoom-meeting`. Set these Edge Function secrets:
+```bash
+supabase secrets set ZOOM_ACCOUNT_ID=your-account-id ZOOM_CLIENT_ID=your-client-id ZOOM_CLIENT_SECRET=your-client-secret
+supabase functions deploy create-zoom-meeting
+```
+The app creates one Zoom meeting through the server and shares the browser join link in the conversation. Do not put Zoom credentials in `.env` or frontend code.
 
 ## 3. Configure and run locally
 ```bash

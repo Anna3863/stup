@@ -343,7 +343,7 @@ function isPersonActive(personId) {
 }
 
 function messageMarkup(text) {
-  return escapeHtml(text).replace(/(https:\/\/zoom\.us\/start\/videomeeting)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  return escapeHtml(text).replace(/(https:\/\/(?:[\w-]+\.)?zoom\.us\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 
 function completedSessionCount(userId) {
@@ -1652,20 +1652,40 @@ function openReviewModal(chatId) {
   });
 }
 
-function openZoomLink(chatId) {
+function zoomBrowserUrl(url) {
+  const isAndroid = /Android/i.test(navigator.userAgent || '');
+  return isAndroid
+    ? `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`
+    : url;
+}
+
+function openZoomInBrowser(url, popup = null) {
+  const browserUrl = zoomBrowserUrl(url);
+  if (popup) {
+    popup.location.href = browserUrl;
+    return;
+  }
+  const opened = window.open(browserUrl, '_blank', 'noopener,noreferrer');
+  if (!opened && /Android/i.test(navigator.userAgent || '')) window.location.assign(url);
+}
+
+async function openZoomLink(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
-  const zoomUrl = 'https://zoom.us/start/videomeeting';
-  const isAndroid = /Android/i.test(navigator.userAgent || '');
-  // Android can route Zoom links to the Zoom app. Target Chrome's browser
-  // explicitly so the meeting starts from the web instead.
-  const browserUrl = isAndroid
-    ? 'intent://zoom.us/start/videomeeting#Intent;scheme=https;package=com.android.chrome;end'
-    : zoomUrl;
-  const opened = window.open(browserUrl, '_blank', 'noopener,noreferrer');
-  if (!opened && isAndroid) window.location.assign(zoomUrl);
-  const alreadyShared = chat.messages.some((message) => message.text === zoomUrl);
-  if (!alreadyShared) {
+  const existingMessage = chat.messages.find((message) => message.text?.startsWith('Zoom link: https://'));
+  const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '');
+  const popup = window.open('about:blank', '_blank');
+  if (popup) popup.opener = null;
+  if (!existingUrl) {
+    if (popup) popup.document.title = 'Creating Zoom meeting…';
+    const { data, error } = await supabase?.functions.invoke('create-zoom-meeting') || {};
+    if (error || !data?.join_url) {
+      popup?.close();
+      toast(error?.message || data?.error || 'Could not create the Zoom meeting.');
+      return;
+    }
+    const zoomUrl = data.join_url;
+    openZoomInBrowser(zoomUrl, popup);
     chat.messages.push({ sender: state.profile.id, text: `Zoom link: ${zoomUrl}` });
     chat.lastUpdated = Date.now();
     saveLocalState();
@@ -1674,7 +1694,9 @@ function openZoomLink(chatId) {
         .then(({ error }) => { if (error) toast(error.message || 'The meeting link was not sent.'); });
     }
     renderInbox();
+    return;
   }
+  openZoomInBrowser(existingUrl, popup);
 }
 
 function openReportModal(partnerId, chatId = 'profile') {

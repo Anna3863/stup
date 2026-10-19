@@ -387,6 +387,10 @@ deno_version = 2
 # Validate the app's bearer token inside the function so browser OPTIONS requests pass CORS.
 verify_jwt = false
 
+[functions.create-zoom-meeting]
+# Validate the app's bearer token inside the function so browser OPTIONS requests pass CORS.
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
