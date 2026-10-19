@@ -1494,6 +1494,9 @@ async function sendMessage(chatId) {
     if (data?.id) {
       remoteMessageId = data.id;
       remoteCreatedAt = data.created_at;
+      supabase.functions.invoke('process-message-notifications').catch((error) => {
+        console.warn('Message email notification worker could not be invoked.', error);
+      });
     }
   }
   const message = {

@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 type Batch = {
   id: string;
+  message_id: string | null;
   recipient_id: string;
   sender_id: string;
   message_count: number;
@@ -41,18 +42,37 @@ async function sendEmail(to: string, senderName: string, count: number) {
 
 Deno.serve(async (request) => {
   const workerSecret = Deno.env.get('MESSAGE_NOTIFICATION_WORKER_SECRET');
-  if (!workerSecret || request.headers.get('x-worker-secret') !== workerSecret) {
+  const hasWorkerSecret = Boolean(workerSecret && request.headers.get('x-worker-secret') === workerSecret);
+  if (!hasWorkerSecret) {
+    const authorization = request.headers.get('authorization');
+    const accessToken = authorization?.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length)
+      : '';
+    const { error: authError } = accessToken
+      ? await supabase.auth.getUser(accessToken)
+      : { error: new Error('Missing authorization') };
+    if (authError) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+  }
+
+  if (request.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 });
+  }
+
+  if (!hasWorkerSecret && !request.headers.get('authorization')) {
     return new Response('Unauthorized', { status: 401 });
   }
 
   const now = new Date().toISOString();
-  const { data: batches, error } = await supabase
+  let batchesQuery = supabase
     .from('message_notification_batches')
-    .select('id,recipient_id,sender_id,message_count,notify_after')
+    .select('id,message_id,recipient_id,sender_id,message_count,notify_after')
     .eq('status', 'pending')
-    .lte('notify_after', now)
     .order('notify_after')
     .limit(100);
+  if (hasWorkerSecret) batchesQuery = batchesQuery.lte('notify_after', now);
+  const { data: batches, error } = await batchesQuery;
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
   let sent = 0;
