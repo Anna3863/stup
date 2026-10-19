@@ -343,7 +343,7 @@ function isPersonActive(personId) {
 }
 
 function messageMarkup(text) {
-  return escapeHtml(text).replace(/(https:\/\/meet\.google\.com\/new)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  return escapeHtml(text).replace(/(https:\/\/zoom\.us\/start\/videomeeting)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 
 function completedSessionCount(userId) {
@@ -1273,14 +1273,14 @@ function renderInbox() {
   const sendButton = document.querySelector('[data-send]');
   const finishButton = document.querySelector('[data-finish]');
   const rateButton = document.querySelector('[data-rate-session]');
-  const meetButton = document.querySelector('[data-meet]');
+  const zoomButton = document.querySelector('[data-zoom]');
 
   if (acceptButton) acceptButton.addEventListener('click', () => acceptChat(activeChat.id));
   if (declineButton) declineButton.addEventListener('click', () => declineChat(activeChat.id));
   if (sendButton) sendButton.addEventListener('click', () => activeChat.editingMessageKey ? saveEditedMessage(activeChat.id) : sendMessage(activeChat.id));
   if (finishButton) finishButton.addEventListener('click', () => completeSession(activeChat.id));
   if (rateButton) rateButton.addEventListener('click', () => openReviewModal(activeChat.id));
-  if (meetButton) meetButton.addEventListener('click', () => openMeetLink(activeChat.id));
+  if (zoomButton) zoomButton.addEventListener('click', () => openZoomLink(activeChat.id));
 }
 
 function renderThread(chat) {
@@ -1343,9 +1343,9 @@ function renderThread(chat) {
               : '<button class="btn" data-rate-session>Rate and comment</button>')
             : '<button class="btn" data-finish>Session complete</button>'}
         </div>
-      ` : '<p class="muted meeting-note">Meet or call to get a point, texting will not result in a session </p>'}
+      ` : '<p class="muted meeting-note">Zoom or call to get a point, texting will not result in a session </p>'}
       <div class="row">
-        <button class="btn" data-meet>Open Google Meet</button>
+        <button class="btn" data-zoom>Open Zoom</button>
       </div>
     `;
   }
@@ -1652,25 +1652,25 @@ function openReviewModal(chatId) {
   });
 }
 
-function openMeetLink(chatId) {
+function openZoomLink(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
-  const meetUrl = 'https://meet.google.com/new';
+  const zoomUrl = 'https://zoom.us/start/videomeeting';
   const isAndroid = /Android/i.test(navigator.userAgent || '');
-  // Android can route meet.google.com links to the Meet app. Target Chrome's
-  // browser explicitly so the meeting is created on the web instead.
+  // Android can route Zoom links to the Zoom app. Target Chrome's browser
+  // explicitly so the meeting starts from the web instead.
   const browserUrl = isAndroid
-    ? 'intent://meet.google.com/new#Intent;scheme=https;package=com.android.chrome;end'
-    : meetUrl;
+    ? 'intent://zoom.us/start/videomeeting#Intent;scheme=https;package=com.android.chrome;end'
+    : zoomUrl;
   const opened = window.open(browserUrl, '_blank', 'noopener,noreferrer');
-  if (!opened && isAndroid) window.location.assign(meetUrl);
-  const alreadyShared = chat.messages.some((message) => message.text === meetUrl);
+  if (!opened && isAndroid) window.location.assign(zoomUrl);
+  const alreadyShared = chat.messages.some((message) => message.text === zoomUrl);
   if (!alreadyShared) {
-    chat.messages.push({ sender: state.profile.id, text: `Google Meet link: ${meetUrl}` });
+    chat.messages.push({ sender: state.profile.id, text: `Zoom link: ${zoomUrl}` });
     chat.lastUpdated = Date.now();
     saveLocalState();
     if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-')) {
-      supabase.from('messages').insert({ conversation_id: chatId, sender_id: state.profile.id, body: `Google Meet link: ${meetUrl}` })
+      supabase.from('messages').insert({ conversation_id: chatId, sender_id: state.profile.id, body: `Zoom link: ${zoomUrl}` })
         .then(({ error }) => { if (error) toast(error.message || 'The meeting link was not sent.'); });
     }
     renderInbox();
