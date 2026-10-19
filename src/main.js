@@ -48,6 +48,8 @@ const SESSION_OFFERS = [
   { sessions: 40, price: '€29.99', label: 'Power pack', description: 'Keep a generous balance for the whole term.' }
 ];
 const BLOCKED_COMMENT_WORDS = /(?:idiot|stupid|hate you|prost|tâmpit|fuck|shit)/i;
+const PROFILE_SELECT = 'id,display_name,school_level,county,main_subject,subject_ratings,bio,lumen_balance,verified,owner,passport_photo_url,profile_photo_url,created_at';
+const PROFILE_SELECT_LEGACY = 'id,display_name,school_level,county,main_subject,created_at';
 
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({
@@ -222,6 +224,18 @@ function getPersonById(id) {
     || state.people.find((person) => person.id === id)
     || state.localUsers.find((person) => person.id === id)
     || null;
+}
+
+async function fetchProfile(userId) {
+  if (!configured || !supabase || !userId) return null;
+  let { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+  if (error) {
+    ({ data, error } = await supabase.from('profiles').select(PROFILE_SELECT).eq('id', userId).maybeSingle());
+  }
+  if (error) {
+    ({ data, error } = await supabase.from('profiles').select(PROFILE_SELECT_LEGACY).eq('id', userId).maybeSingle());
+  }
+  return error ? null : data;
 }
 
 function isFavorite(profileId) {
@@ -525,7 +539,12 @@ async function fetchPeople() {
     // one of the newer profile columns yet.
     if (error) {
       ({ data, error } = await supabase.from('profiles')
-        .select('id,display_name,school_level,county,main_subject,subject_ratings,bio,lumen_balance,verified,owner,passport_photo_url,created_at')
+        .select(PROFILE_SELECT)
+        .order('created_at', { ascending: false }));
+    }
+    if (error) {
+      ({ data, error } = await supabase.from('profiles')
+        .select(PROFILE_SELECT_LEGACY)
         .order('created_at', { ascending: false }));
     }
     if (!error) {
@@ -535,7 +554,9 @@ async function fetchPeople() {
   }
 
   const localCurrentId = state.profile?.id || null;
-  state.people = state.localUsers.filter((person) => person.id !== localCurrentId);
+  if (!(configured && state.session?.user)) {
+    state.people = state.localUsers.filter((person) => person.id !== localCurrentId);
+  }
 }
 
 async function fetchReviews() {
@@ -588,7 +609,7 @@ async function fetchConversations() {
       .in('id', participantIds);
     if (participantProfilesError) {
       ({ data: participantProfiles } = await supabase.from('profiles')
-        .select('id,display_name,school_level,county,main_subject,subject_ratings,bio,lumen_balance,verified,owner,passport_photo_url,created_at')
+        .select(PROFILE_SELECT)
         .in('id', participantIds));
     }
     if (participantProfiles?.length) {
@@ -735,7 +756,10 @@ function subscribeToPresence() {
 }
 
 function renderDiscover() {
-  const availablePeople = state.people.filter((person) => !state.profile || person.county === state.profile.county);
+  const sameCountyPeople = state.people.filter((person) => person.county === state.profile?.county);
+  // County is a preference, not an access restriction. Legacy/corrupt county
+  // text must not make the entire directory disappear.
+  const availablePeople = sameCountyPeople.length ? sameCountyPeople : state.people;
   let filteredPeople = [];
   let resultTitle = '';
   let matchedSubject = '';
@@ -2228,8 +2252,7 @@ function authScreen(mode = 'signup') {
         }
         state.session = data.session;
         if (await rejectUnverifiedSession(data.session)) return;
-        const { data: profileRow, error: profileErr } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
-        if (profileErr) throw profileErr;
+        const profileRow = await fetchProfile(data.user.id);
         if (profileRow) {
           state.profile = profileRow;
         } else {
@@ -2332,8 +2355,10 @@ async function bootstrap() {
   state.session = session;
   const rejectedSession = session ? await rejectUnverifiedSession(session) : false;
   if (session && !rejectedSession) {
-    const { data: profileRow, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-    if (!error && profileRow) {
+    // Do not let a cached profile from another account survive a refresh.
+    state.profile = null;
+    const profileRow = await fetchProfile(session.user.id);
+    if (profileRow) {
       state.profile = profileRow;
     }
     await fetchPeople();
