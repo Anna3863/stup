@@ -1752,7 +1752,16 @@ async function openZoomLink(chatId) {
       return;
     }
     if (error || !data?.join_url) {
-      const serverMessage = data?.error || error?.context?.error || error?.message;
+      let responseMessage = '';
+      if (error?.context && typeof error.context.clone === 'function') {
+        try {
+          const responseBody = await error.context.clone().json();
+          responseMessage = responseBody?.error || responseBody?.message || '';
+        } catch {
+          // Some gateway errors return plain text or an empty response body.
+        }
+      }
+      const serverMessage = data?.error || responseMessage || error?.context?.error || error?.message;
       toast(serverMessage || 'Could not create the Zoom meeting.');
       return;
     }
