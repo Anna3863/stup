@@ -133,10 +133,7 @@ Deno.serve(async (request) => {
       requester_email_hash: await emailHash(requester.data.user.email),
       helper_email_hash: await emailHash(helper.data.user.email)
     });
-    // Attendance/reward tracking is optional. A missing or not-yet-migrated
-    // attendance table must not turn an already-created Zoom meeting into a
-    // failed request or prevent the link from being delivered.
-    if (attendanceError) console.error('Zoom attendance tracking unavailable:', attendanceError.message);
+    if (attendanceError) throw attendanceError;
     return jsonResponse({ join_url: browserJoinUrl });
   } catch (error) {
     return jsonResponse({ error: errorText(error) }, 500);

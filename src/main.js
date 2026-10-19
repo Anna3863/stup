@@ -1411,7 +1411,7 @@ function renderThread(chat) {
               : '<button class="btn" data-rate-session>Rate and comment</button>')
             : '<button class="btn" data-finish>Session complete</button>'}
         </div>
-      ` : '<p class="muted meeting-note">Zoom or call to get a point, texting will not result in a session </p>'}
+      ` : '<p class="muted meeting-note">Zoom or call to get a session; texting will not result in obtaining or using up one.</p>'}
       <div class="row">
         <button class="btn" type="button" data-zoom>Open Zoom</button>
       </div>
