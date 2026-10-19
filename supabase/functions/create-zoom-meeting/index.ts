@@ -95,7 +95,11 @@ Deno.serve(async (request) => {
     }
 
     const zoomToken = await getZoomAccessToken();
-    const response = await fetch('https://api.zoom.us/v2/users/me/meetings', {
+    // The helper is the teacher and must own/host the meeting. This requires
+    // the Zoom app to have meeting:write:admin and the helper to be a user in
+    // the same Zoom account as the Server-to-Server OAuth app.
+    const helperEmail = helper.data.user.email;
+    const response = await fetch(`https://api.zoom.us/v2/users/${encodeURIComponent(helperEmail)}/meetings`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${zoomToken}`,
@@ -116,7 +120,7 @@ Deno.serve(async (request) => {
     if (!response.ok) {
       const responseText = await response.text();
       if (/does not contain scopes|invalid access token/i.test(responseText)) {
-        throw new Error('Zoom OAuth is missing the meeting creation scope. Add meeting:write:meeting (or meeting:write) to the Zoom app, then regenerate its credentials.');
+        throw new Error('Zoom OAuth is missing the admin meeting creation scope. Add meeting:write:admin to the Zoom app, then refresh its credentials. The helper must also be a user in that Zoom account.');
       }
       throw new Error(`Zoom meeting creation returned ${response.status}: ${responseText}`);
     }
