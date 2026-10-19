@@ -67,6 +67,10 @@ async function ensureZoomMessage(conversationId: string, senderId: string, body:
   return inserted;
 }
 
+function participantJoinUrl(url: string) {
+  return String(url).replace(/\/wc\/(\d+)\/join(\b|\?)/, '/j/$1$2');
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
@@ -111,12 +115,16 @@ Deno.serve(async (request) => {
     if (!requester.data.user?.email || !helper.data.user?.email) throw new Error('Both participants need verified email addresses.');
 
     if (conversation.zoom_meeting_id && conversation.zoom_join_url) {
+      const joinUrl = participantJoinUrl(conversation.zoom_join_url);
+      if (joinUrl !== conversation.zoom_join_url) {
+        await supabase.from('conversations').update({ zoom_join_url: joinUrl }).eq('id', conversationId);
+      }
       const message = await ensureZoomMessage(
         conversationId,
         authUser.user.id,
-        `Zoom link: ${conversation.zoom_join_url}`
+        `Zoom link: ${joinUrl}`
       );
-      return jsonResponse({ join_url: conversation.zoom_join_url, message_id: message.id, message_created_at: message.created_at });
+      return jsonResponse({ join_url: joinUrl, message_id: message.id, message_created_at: message.created_at });
     }
 
     const zoomToken = await getZoomAccessToken();
@@ -152,7 +160,7 @@ Deno.serve(async (request) => {
 
     const meeting = await response.json();
     if (!meeting.join_url) throw new Error('Zoom did not return a meeting join URL.');
-    const browserJoinUrl = String(meeting.join_url).replace(/\/j\/(\d+)/, '/wc/$1/join');
+    const browserJoinUrl = String(meeting.join_url);
     const meetingId = String(meeting.id);
     const { error: saveError } = await supabase.from('conversations').update({
       requester_id: requesterId,

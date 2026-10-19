@@ -1728,7 +1728,8 @@ async function openZoomLink(chatId) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   if (!chat) return;
   const existingMessage = chat.messages.find((message) => message.text?.startsWith('Zoom link: https://'));
-  const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '');
+  const existingUrl = existingMessage?.text?.replace(/^Zoom link:\s*/, '')
+    ?.replace(/\/wc\/(\d+)\/join\b/, '/j/$1');
   if (existingMessage?.id && existingUrl) {
     toast('Opening Zoom…');
     openZoomInBrowser(existingUrl);
