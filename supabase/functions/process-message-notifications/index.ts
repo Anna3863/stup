@@ -37,7 +37,10 @@ async function sendEmail(to: string, senderName: string, count: number) {
       html: `<p><strong>${safeName}</strong> sent you <strong>${count}</strong> new ${messageLabel}.</p><p>Open the app to read and reply.</p>`
     })
   });
-  if (!response.ok) throw new Error(`Email provider returned ${response.status}.`);
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Email provider returned ${response.status}${details ? `: ${details}` : '.'}`);
+  }
 }
 
 Deno.serve(async (request) => {
@@ -76,6 +79,8 @@ Deno.serve(async (request) => {
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
   let sent = 0;
+  let failed = 0;
+  const errors: string[] = [];
   for (const batch of (batches || []) as Batch[]) {
     const { data: claimed } = await supabase
       .from('message_notification_batches')
@@ -98,9 +103,12 @@ Deno.serve(async (request) => {
       await supabase.from('message_notification_batches').delete().eq('id', batch.id).eq('status', 'processing');
       sent += 1;
     } catch (sendError) {
-      await supabase.from('message_notification_batches').update({ status: 'pending', last_error: String(sendError) }).eq('id', batch.id);
+      const errorMessage = sendError instanceof Error ? sendError.message : String(sendError);
+      failed += 1;
+      errors.push(errorMessage);
+      await supabase.from('message_notification_batches').update({ status: 'pending', last_error: errorMessage }).eq('id', batch.id);
     }
   }
 
-  return Response.json({ processed: (batches || []).length, sent });
+  return Response.json({ processed: (batches || []).length, sent, failed, errors });
 });

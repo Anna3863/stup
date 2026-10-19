@@ -1494,8 +1494,16 @@ async function sendMessage(chatId) {
     if (data?.id) {
       remoteMessageId = data.id;
       remoteCreatedAt = data.created_at;
-      supabase.functions.invoke('process-message-notifications').catch((error) => {
-        console.warn('Message email notification worker could not be invoked.', error);
+      supabase.functions.invoke('process-message-notifications').then(({ data: notification, error: notificationError }) => {
+        if (notificationError) {
+          toast(`Email notification failed: ${notificationError.message || 'Could not run the notification worker.'}`);
+        } else if (!notification?.processed) {
+          toast('Message sent, but no email notification was queued. Run the notification migration.');
+        } else if (notification.failed) {
+          toast(`Email notification failed: ${notification.errors?.[0] || 'Check the notification worker logs.'}`);
+        }
+      }).catch((error) => {
+        toast(`Email notification failed: ${error.message || 'Could not run the notification worker.'}`);
       });
     }
   }
