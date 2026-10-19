@@ -3,6 +3,7 @@ import './style.css';
 import './profile-reviews.css';
 import './ora-search.css';
 import './features.css';
+import './keyboard.css';
 import logoMark from './galbui.png';
 
 const SUBJECTS = ['Romanian language and literature','Mathematics','Physics','Chemistry','Biology','History','Geography','Computer science','ICT','English','French','German','Spanish','Latin','Logic','Psychology','Philosophy','Economics','Social education','Art','Music','Physical education','Religion','Technology','Natural sciences','Entrepreneurship'];
@@ -132,6 +133,40 @@ function saveLocalState() {
     minRating: state.minRating,
     activeChatId: state.activeChatId
   }));
+}
+
+function setupKeyboardViewport() {
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+
+  const isTextField = (element) => element
+    && ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName);
+
+  const scrollFocusedFieldIntoView = () => {
+    const activeElement = document.activeElement;
+    if (!isTextField(activeElement)) return;
+    requestAnimationFrame(() => activeElement.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+  };
+
+  const updateViewport = () => {
+    const keyboardHeight = Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop));
+    document.documentElement.style.setProperty('--keyboard-height', `${keyboardHeight}px`);
+    document.documentElement.style.setProperty('--viewport-height', `${Math.round(viewport.height)}px`);
+    document.body.classList.toggle('keyboard-open', keyboardHeight > 80);
+  };
+
+  viewport.addEventListener('resize', () => {
+    updateViewport();
+    scrollFocusedFieldIntoView();
+  });
+  viewport.addEventListener('scroll', updateViewport, { passive: true });
+  document.addEventListener('focusin', (event) => {
+    if (!isTextField(event.target)) return;
+    updateViewport();
+    setTimeout(scrollFocusedFieldIntoView, 100);
+  });
+  document.addEventListener('focusout', () => setTimeout(updateViewport, 150));
+  updateViewport();
 }
 
 function isEmailVerified(user) {
@@ -2174,6 +2209,7 @@ function authScreen(mode = 'signup') {
 }
 
 async function bootstrap() {
+  setupKeyboardViewport();
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   const scrollInitialThreadToBottom = () => {
     if (state.view === 'inbox') scrollMessagesToLatest();
