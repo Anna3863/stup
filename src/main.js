@@ -17,7 +17,6 @@ const state = {
   people: [],
   reviews: [],
   reviewsLoadError: '',
-  profilesLoadError: '',
   chats: [],
   favorites: [],
   onlineUsers: new Set(),
@@ -521,23 +520,11 @@ async function uploadProfilePhoto(file, userId) {
 
 async function fetchPeople() {
   if (configured && supabase) {
-    let { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    if (error && /created_at|column/i.test(error.message || '')) {
-      ({ data, error } = await supabase.from('profiles').select('*'));
-    }
+    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
     if (!error) {
-      state.profilesLoadError = '';
       state.people = (data || []).filter((person) => person.id !== state.profile?.id);
       return;
     }
-
-    // Do not replace real remote participants with the generic "Student" label
-    // when a profile request fails. Keep any already-loaded profiles and expose
-    // the error so the failure can be corrected instead of being hidden.
-    state.profilesLoadError = error.message || 'Could not load profiles.';
-    if (state.people.length) return;
-    toast(`Could not load profiles: ${state.profilesLoadError}`);
-    return;
   }
 
   const localCurrentId = state.profile?.id || null;
