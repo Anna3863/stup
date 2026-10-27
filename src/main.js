@@ -13,6 +13,402 @@ const SUBJECTS = ['Romanian language and literature','Mathematics','Physics','Ch
 const LEVELS = ['Middle school','High school','University'];
 const COUNTIES = ['București','Cluj','Iași','Brașov','Timiș','Constanța','Sibiu','Arad','Alba','Bihor','Prahova'];
 const STORAGE_KEY = 'stup-local-state-v1';
+const LANGUAGE_STORAGE_KEY = 'stup-language-v1';
+let currentLanguage = localStorage.getItem(LANGUAGE_STORAGE_KEY) === 'ro' ? 'ro' : 'en';
+
+const ROMANIAN_TRANSLATIONS = {
+  'Discover': 'Descoperă',
+  'Inbox': 'Mesaje',
+  'Settings': 'Setări',
+  'Sessions': 'Sesiuni',
+  'View session balance and offers': 'Vezi soldul și ofertele de sesiuni',
+  'Choose search type': 'Alege tipul de căutare',
+  'Subject': 'Materie',
+  'Ask AI': 'Întreabă AI-ul',
+  'Minimum subject rating': 'Evaluarea minimă la materie',
+  'Describe what you need help with': 'Descrie cu ce ai nevoie de ajutor',
+  'Search': 'Caută',
+  'Searching…': 'Se caută…',
+  'Gemini does not collect or store any of your search queries.': 'Gemini nu colectează și nu stochează căutările tale.',
+  'Students with matching strengths': 'Elevi cu puncte forte potrivite',
+  'Clear': 'Resetează',
+  'Help with:': 'Ajutor la:',
+  'Study help': 'Ajutor la învățat',
+  'View profile': 'Vezi profilul',
+  'Remove from favorites': 'Elimină din lista de favorite',
+  'Add to favorites': 'Adaugă la favorite',
+  'Remove favorite': 'Elimină de la favorite',
+  '♥ Remove favorite': '♥ Elimină de la favorite',
+  '♡ Add to favorites': '♡ Adaugă la favorite',
+  '♥ Saved': '♥ Salvat',
+  '♡ Favorite': '♡ Favorit',
+  'Message': 'Mesaj',
+  'this student': 'acest elev',
+  'Unblock': 'Deblochează',
+  'Block': 'Blochează',
+  'Platform owner': 'Administratorul platformei',
+  'Passport photo verified': 'Fotografie de pașaport verificată',
+  'Passport photo pending verification': 'Fotografia de pașaport așteaptă verificarea',
+  'Subject ratings': 'Evaluări la materii',
+  'No subject ratings yet.': 'Încă nu există evaluări la materii.',
+  'Student reviews': 'Recenzii de la elevi',
+  'rating': 'evaluare',
+  'ratings': 'evaluări',
+  'No ratings yet': 'Încă nu există evaluări',
+  'Could not load reviews:': 'Recenziile nu au putut fi încărcate:',
+  'No comments yet. Reviews appear after a completed session.': 'Încă nu există comentarii. Recenziile apar după încheierea unei sesiuni.',
+  'Close': 'Închide',
+  'Advertisement': 'Publicitate',
+  'No matching profiles just yet.': 'Încă nu există profiluri potrivite.',
+  'No students match that search.': 'Niciun elev nu corespunde căutării.',
+  'Try another subject, lower the rating, or search a different topic.': 'Încearcă altă materie, o evaluare minimă mai mică sau caută alt subiect.',
+  'Your learning balance': 'Soldul tău de sesiuni',
+  'Switch language': 'Schimbă limba',
+  'Close sessions information': 'Închide informațiile despre sesiuni',
+  'What are sessions?': 'Ce sunt sesiunile?',
+  'Sessions are credits for booking time with another student. Use 1 session when you ask for help. When you teach someone and complete the session, you earn 1 back.': 'Sesiunile sunt credite pentru a programa timp cu un alt elev. Folosește o sesiune când ceri ajutor. Când îi predai cuiva și sesiunea este încheiată, primești o sesiune înapoi.',
+  'You start with': 'Începi cu',
+  'sessions. You can earn more by teaching or add to your balance with a pack below.': 'de sesiuni. Poți câștiga mai multe predând sau poți adăuga sesiuni cu unul dintre pachetele de mai jos.',
+  'Best value': 'Cel mai avantajos',
+  'sessions': 'sesiuni',
+  'A few extra sessions for your next study sprint.': 'Câteva sesiuni în plus pentru următoarea perioadă de învățat.',
+  'Keep a generous balance for the whole term.': 'Păstrează un sold generos pentru întregul semestru.',
+  'Buy pack': 'Cumpără pachetul',
+  'Secure checkout will be available soon. Teaching remains free.': 'Plățile securizate vor fi disponibile în curând. Predatul rămâne gratuit.',
+  'Study group': 'Grup de studiu',
+  'Create a study group': 'Creează un grup de studiu',
+  'Close group details': 'Închide detaliile grupului',
+  'Group name': 'Numele grupului',
+  'Group study': 'Învățare în grup',
+  'Biology study group': 'Grup de studiu la biologie',
+  'Only students who accepted your message request are shown.': 'Sunt afișați doar elevii care ți-au acceptat cererea de mesaj.',
+  'Create group': 'Creează grupul',
+  'Cancel': 'Anulează',
+  'Members': 'Membri',
+  'Admin': 'Administrator',
+  'Member': 'Membru',
+  'Creator': 'Creator',
+  '· Creator': '· Inițiator',
+  'Make admin': 'Fă administrator',
+  'Group logo': 'Imaginea grupului',
+  'Save group settings': 'Salvează setările grupului',
+  'No conversations yet.': 'Încă nu există conversații.',
+  'Start a conversation from Discover.': 'Începe o conversație din pagina Descoperă.',
+  '← All contacts': '← Toate contactele',
+  'Active now': 'Activ acum',
+  'Offline': 'Inactiv',
+  'new': 'noi',
+  'Online': 'Online',
+  'Type a message…': 'Tastează un mesaj…',
+  'Send': 'Trimite',
+  'Jump to latest': 'Mergi la cele mai recente',
+  'Accept': 'Acceptă',
+  'Decline': 'Refuză',
+  'Session booked:': 'Sesiune programată:',
+  'Session completed:': 'Sesiune încheiată:',
+  'You rated this session.': 'Ai evaluat această sesiune.',
+  'Rate and comment': 'Evaluează și comentează',
+  'Session complete': 'Sesiune încheiată',
+  'Zoom session ready': 'Sesiunea Zoom este pregătită',
+  'Use the button below to join the shared session.': 'Folosește butonul de mai jos pentru a participa la sesiune.',
+  'Join Zoom session': 'Alătură-te sesiunii Zoom',
+  'This request was declined.': 'Această cerere a fost refuzată.',
+  'Zoom or call to get a session; texting will not result in obtaining or using up one.': 'Folosește Zoom sau un apel pentru a desfășura o sesiune; mesajele text nu oferă și nu consumă sesiuni.',
+  'Open group details': 'Deschide detaliile grupului',
+  'More actions for': 'Mai multe acțiuni pentru',
+  'No bio added yet.': 'Nu a fost adăugată o descriere.',
+  'More actions': 'Mai multe acțiuni',
+  'Request a study session': 'Solicită o sesiune de studiu',
+  'Report student': 'Raportează elevul',
+  'Your learning profile': 'Profilul tău de învățare',
+  'Save changes': 'Salvează modificările',
+  'Your profile': 'Profilul tău',
+  'Your student rating': 'Evaluarea ta ca elev',
+  'Based on feedback from completed sessions.': 'Pe baza feedbackului din sesiunile încheiate.',
+  'Profile picture': 'Poză de profil',
+  'Choose a JPG, PNG, or WebP image up to 5 MB.': 'Alege o imagine JPG, PNG sau WebP de maximum 5 MB.',
+  'In-person sessions are available.': 'Sesiunile față în față sunt disponibile.',
+  'Online sessions are available now. A verified passport photo is required for in-person meetings.': 'Sesiunile online sunt disponibile acum. Pentru întâlnirile față în față este necesară o fotografie de pașaport verificată.',
+  'Save profile': 'Salvează profilul',
+  'Saving…': 'Se salvează…',
+  'Log out': 'Deconectare',
+  'Log in': 'Autentificare',
+  'Sign up': 'Înregistrare',
+  'Learn from students who just got it.': 'Învață de la elevi care tocmai au înțeles materia.',
+  'Welcome back.': 'Bine ai revenit.',
+  'Teach what you know. Ask for help when you need it.': 'Predă ceea ce știi. Cere ajutor când ai nevoie.',
+  'Full name': 'Numele complet',
+  'At least 8 characters': 'Cel puțin 8 caractere',
+  'If Supabase is enabled, we’ll save the passport photo in the passport-photos bucket when available.': 'Dacă Supabase este activat, fotografia de pașaport va fi salvată în spațiul passport-photos când acesta este disponibil.',
+  'Create account': 'Creează un cont',
+  'Already have an account?': 'Ai deja un cont?',
+  'New to stup?': 'Ești nou pe stup?',
+  'Alex Popescu': 'Alex Popescu',
+  'you@example.com': 'tu@exemplu.ro',
+  'Email': 'E-mail',
+  'Password': 'Parolă',
+  'Display name': 'Nume afișat',
+  'School level': 'Nivel de studiu',
+  'County': 'Județ',
+  'Main subject': 'Materia principală',
+  'Bio': 'Descriere',
+  'Middle school': 'Gimnaziu',
+  'High school': 'Liceu',
+  'University': 'Universitate',
+  'Romanian language and literature': 'Limba și literatura română',
+  'Mathematics': 'Matematică',
+  'Physics': 'Fizică',
+  'Chemistry': 'Chimie',
+  'Biology': 'Biologie',
+  'History': 'Istorie',
+  'Geography': 'Geografie',
+  'Computer science': 'Informatică',
+  'ICT': 'TIC',
+  'English': 'Engleză',
+  'French': 'Franceză',
+  'German': 'Germană',
+  'Spanish': 'Spaniolă',
+  'Latin': 'Latină',
+  'Logic': 'Logică',
+  'Psychology': 'Psihologie',
+  'Philosophy': 'Filosofie',
+  'Economics': 'Economie',
+  'Social education': 'Educație socială',
+  'Art': 'Arte',
+  'Music': 'Muzică',
+  'Physical education': 'Educație fizică',
+  'Religion': 'Religie',
+  'Technology': 'Tehnologie',
+  'Natural sciences': 'Științe ale naturii',
+  'Entrepreneurship': 'Educație antreprenorială',
+  'Language': 'Limbă',
+  'Starter': 'Începător',
+  'Popular': 'Popular',
+  'Power pack': 'Pachet extins',
+  'You': 'Tu',
+  'Reply': 'Răspunde',
+  'Edit': 'Editează',
+  'Delete': 'Șterge',
+  'Edit message': 'Modifică mesajul',
+  'Delete message': 'Șterge mesajul',
+  'Replying to': 'Răspuns către',
+  'Cancel edit': 'Anulează editarea',
+  'Cancel reply': 'Anulează răspunsul',
+  'Failed to send': 'Trimiterea a eșuat',
+  'Read': 'Citit',
+  'Delivered': 'Livrat',
+  'Sent': 'Trimis',
+  '· edited': '· editat',
+  'Message actions': 'Acțiuni pentru mesaj',
+  'No messages yet.': 'Încă nu există mesaje.',
+  'Jump to latest message': 'Mergi la cel mai recent mesaj',
+  'Message request': 'Cerere de mesaj',
+  'Accept this request to start chatting and become eligible for group invitations.': 'Acceptă această cerere pentru a începe conversația și a putea fi invitat în grupuri.',
+  'Accept request': 'Acceptă cererea',
+  'Editing message': 'Editezi mesajul',
+  'Make your changes, then press Save.': 'Fă modificările, apoi apasă Salvează.',
+  'Edit your message…': 'Editează mesajul…',
+  'Write a message…': 'Scrie un mesaj…',
+  'Edit your message': 'Editează mesajul',
+  'Write a message': 'Scrie un mesaj',
+  'Save': 'Salvează',
+  'You blocked this student. Messages will fail to send.': 'Ai blocat acest elev. Mesajele nu vor fi trimise.',
+  'Rate your session': 'Evaluează sesiunea',
+  'Post': 'Publică',
+  'Report': 'Raportează',
+  'This flags misconduct, no-shows, unsafe behavior, or inappropriate content.': 'Semnalează comportamentul necorespunzător, absențele, comportamentul nesigur sau conținutul nepotrivit.',
+  'Describe what happened…': 'Descrie ce s-a întâmplat…',
+  'Submit report': 'Trimite raportul',
+  'Could not edit this hosted message. Run migration_message_controls.sql in Supabase first.': 'Acest mesaj găzduit nu a putut fi editat. Mai întâi rulează migration_message_controls.sql în Supabase.',
+  'Could not send report.': 'Raportul nu a putut fi trimis.',
+  'online': 'online',
+  'in-person': 'față în față',
+  'Session rating': 'Evaluarea sesiunii',
+  'One session': 'O sesiune',
+  'One member': 'Un membru',
+  'Pending': 'În așteptare',
+  'Profile': 'Profil',
+  'My profile': 'Profilul meu',
+  'Profile photo': 'Fotografie de profil',
+  'Passport photo': 'Fotografie de pașaport',
+  'Verified': 'Verificat',
+  'Favorite': 'Favorite',
+  'Favorites': 'Profiluri favorite',
+  'Review': 'Recenzie',
+  'Reviews': 'Recenzii',
+  'Rating': 'Evaluare',
+  'Comment': 'Comentariu',
+  'Submit': 'Trimite formularul',
+  'Loading…': 'Se încarcă…',
+  'No students found.': 'Nu s-au găsit elevi.',
+  'English language': 'Limba engleză',
+  'Romanian': 'Română',
+  'The best balance for regular learning and teaching.': 'Echilibrul ideal pentru învățat și predat în mod regulat.',
+  'Search locally for students who can help with': 'Caută local elevi care te pot ajuta la',
+  'You need help with': 'Ai nevoie de ajutor la',
+  'Please verify your email before logging in.': 'Verifică-ți adresa de e-mail înainte de autentificare.',
+  'Student blocked. Messages can no longer be sent.': 'Elevul a fost blocat. Nu mai poți trimite mesaje.',
+  'Checkout is coming soon — you can earn sessions by teaching in the meantime.': 'Plățile vor fi disponibile în curând — între timp poți câștiga sesiuni predând.',
+  'Describe what you need help with first.': 'Descrie mai întâi cu ce ai nevoie de ajutor.',
+  'Student unblocked.': 'Elevul a fost deblocat.',
+  'Block this student? You will not be able to send them messages.': 'Blochezi acest elev? Nu îi vei mai putea trimite mesaje.',
+  'Only students who accepted your message request can be added to a group.': 'În grup pot fi adăugați doar elevii care ți-au acceptat cererea de mesaj.',
+  'Add a group name and at least one student.': 'Adaugă un nume grupului și selectează cel puțin un elev.',
+  'Group settings saved.': 'Setările grupului au fost salvate.',
+  'Delete this message?': 'Ștergi acest mesaj?',
+  'Message blocked. Keep the conversation respectful.': 'Mesaj blocat. Păstrează conversația respectuoasă.',
+  'You need 1 session credit to book. Complete a teaching session to earn one.': 'Ai nevoie de un credit de sesiune pentru programare. Încheie o sesiune de predare pentru a câștiga unul.',
+  'Choose a date and time (YYYY-MM-DD HH:mm)': 'Alege data și ora (AAAA-LL-ZZ HH:mm)',
+  'Session type: online or in-person?': 'Tipul sesiunii: online sau față în față?',
+  'In-person sessions require a verified passport photo. Choose online or verify your profile first.': 'Sesiunile față în față necesită o fotografie de pașaport verificată. Alege sesiunea online sau verifică-ți profilul.',
+  'Choose a valid date and time.': 'Alege o dată și o oră valide.',
+  'Only the student who requested this session can rate it.': 'Doar elevul care a solicitat sesiunea o poate evalua.',
+  'You have already rated this session.': 'Ai evaluat deja această sesiune.',
+  'Could not find this student’s profile.': 'Profilul acestui elev nu a fost găsit.',
+  'Comment blocked. Keep feedback respectful and free of insults.': 'Comentariu blocat. Oferă feedback respectuos și fără insulte.',
+  'Review posted.': 'Recenzia a fost publicată.',
+  'Zoom is not configured. Please deploy the create-zoom-meeting function first.': 'Zoom nu este configurat. Mai întâi publică funcția create-zoom-meeting.',
+  'Creating Zoom meeting…': 'Se creează întâlnirea Zoom…',
+  'This local chat cannot send the Zoom link to another person.': 'Această conversație locală nu poate trimite linkul Zoom altei persoane.',
+  'Please add a short explanation.': 'Adaugă o scurtă explicație.',
+  'Report sent.': 'Raportul a fost trimis.',
+  'Choose a JPG, PNG, or WebP image smaller than 5 MB.': 'Alege o imagine JPG, PNG sau WebP mai mică de 5 MB.',
+  'Profile saved to your account, but this browser could not update its local cache.': 'Profilul a fost salvat în cont, dar browserul nu a putut actualiza memoria locală.',
+  'Profile saved.': 'Profilul a fost salvat.',
+  'Email and password are required.': 'Adresa de e-mail și parola sunt obligatorii.',
+  'Please add your full name.': 'Adaugă numele tău complet.',
+  'Account created. Please verify your email before logging in.': 'Contul a fost creat. Verifică-ți adresa de e-mail înainte de autentificare.',
+  'Wrong email or password.': 'Adresa de e-mail sau parola este greșită.',
+  'This email already has a local demo account.': 'Această adresă de e-mail are deja un cont demo local.',
+  'Supabase is unavailable, so this demo account was created locally.': 'Supabase nu este disponibil, așa că acest cont demo a fost creat local.',
+  'Please add your display name.': 'Adaugă numele pe care vrei să îl afișezi.',
+  'Could not start the conversation.': 'Conversația nu a putut fi începută.',
+  'Could not create the study group.': 'Grupul de studiu nu a putut fi creat.',
+  'Could not update the group.': 'Grupul nu a putut fi actualizat.',
+  'Could not make this member an admin.': 'Acest membru nu a putut fi numit administrator.',
+  'Could not accept this message request.': 'Cererea de mesaj nu a putut fi acceptată.',
+  'Could not update read status.': 'Starea mesajului nu a putut fi actualizată.',
+  'Could not update favorites.': 'Lista de favorite nu a putut fi actualizată.',
+};
+
+function localizeText(value) {
+  const text = String(value);
+  if (currentLanguage === 'ro') {
+    const sessions = text.match(/^(✦ )?(\d+) Sessions$/);
+    if (sessions) return `${sessions[1] || ''}${sessions[2]} ${Number(sessions[2]) === 1 ? 'Sesiune' : 'Sesiuni'}`;
+    const members = text.match(/^(\d+) members$/);
+    if (members) return `${members[1]} membri`;
+    const membersWithNames = text.match(/^(\d+) members ·$/);
+    if (membersWithNames) return `${membersWithNames[1]} membri ·`;
+    const newMessages = text.match(/^(\d+) new$/);
+    if (newMessages) return `${newMessages[1]} noi`;
+    const activeStatus = text.match(/^(Active now|Offline) ·$/);
+    if (activeStatus) return `${localizeText(activeStatus[1])} ·`;
+    const rating = text.match(/^(\d+) rating$/);
+    if (rating) return `${rating[1]} evaluare`;
+    const ratings = text.match(/^(\d+) ratings$/);
+    if (ratings) return `${ratings[1]} evaluări`;
+    const profileRating = text.match(/^★ ([\d.]+) \/ 5 · (\d+) ratings?$/);
+    if (profileRating) return `★ ${profileRating[1]} / 5 · ${profileRating[2]} ${Number(profileRating[2]) === 1 ? 'evaluare' : 'evaluări'}`;
+    const stars = text.match(/^([\d.]+) out of 5 stars$/);
+    if (stars) return `${stars[1]} din 5 stele`;
+    const subjectRating = text.match(/^(.+) rating$/);
+    if (subjectRating) return `${localizeText(subjectRating[1])} evaluare`;
+    const result = text.match(/^([^,]+), (\d+)\+$/);
+    if (result) return `${localizeText(result[1])}, ${result[2]}+`;
+    const reportHeading = text.match(/^Report (.+)$/);
+    if (reportHeading) return `Raportează ${reportHeading[1]}`;
+    const groupDetailsLabel = text.match(/^Open (.+) details$/);
+    if (groupDetailsLabel) return `Deschide detaliile pentru ${groupDetailsLabel[1]}`;
+    const profileLabel = text.match(/^Open (.+)'s profile$/);
+    if (profileLabel) return `Deschide profilul persoanei ${profileLabel[1]}`;
+    const moreActionsLabel = text.match(/^More actions for (.+)$/);
+    if (moreActionsLabel) return `Mai multe acțiuni pentru ${moreActionsLabel[1]}`;
+    const aiMessage = text.match(/^Searching locally for students who can help with (.+)\.$/);
+    if (aiMessage) return `Căutăm local elevi care te pot ajuta la ${localizeText(aiMessage[1])}.`;
+    const emptyAiResult = text.match(/^We understood that you need help with (.+), but no matching student was found\.$/);
+    if (emptyAiResult) return `Am înțeles că ai nevoie de ajutor la ${localizeText(emptyAiResult[1])}, dar nu am găsit niciun elev potrivit.`;
+    const sessionIntro = text.match(/^You start with (\d+) sessions\. You can earn more by teaching or add to your balance with a pack below\.$/);
+    if (sessionIntro) return `Începi cu ${sessionIntro[1]} sesiuni. Poți câștiga mai multe predând sau poți adăuga sesiuni cu unul dintre pachetele de mai jos.`;
+    return ROMANIAN_TRANSLATIONS[text] || text;
+  }
+  const sessions = text.match(/^(✦ )?(\d+) Sesiun(?:e|i)$/);
+  if (sessions) return `${sessions[1] || ''}${sessions[2]} ${Number(sessions[2]) === 1 ? 'Session' : 'Sessions'}`;
+  const members = text.match(/^(\d+) membri$/);
+  if (members) return `${members[1]} members`;
+  const membersWithNames = text.match(/^(\d+) membri ·$/);
+  if (membersWithNames) return `${membersWithNames[1]} members ·`;
+  const newMessages = text.match(/^(\d+) noi$/);
+  if (newMessages) return `${newMessages[1]} new`;
+  const activeStatus = text.match(/^(Activ acum|Inactiv) ·$/);
+  if (activeStatus) return `${activeStatus[1] === 'Activ acum' ? 'Active now' : 'Offline'} ·`;
+  const rating = text.match(/^(\d+) evaluare$/);
+  if (rating) return `${rating[1]} rating`;
+  const ratings = text.match(/^(\d+) evaluări$/);
+  if (ratings) return `${ratings[1]} ratings`;
+  const profileRating = text.match(/^★ ([\d.]+) \/ 5 · (\d+) evaluări?$/);
+  if (profileRating) return `★ ${profileRating[1]} / 5 · ${profileRating[2]} ${Number(profileRating[2]) === 1 ? 'rating' : 'ratings'}`;
+  const stars = text.match(/^([\d.]+) din 5 stele$/);
+  if (stars) return `${stars[1]} out of 5 stars`;
+  const subjectRating = text.match(/^(.+) evaluare$/);
+  if (subjectRating) return `${localizeText(subjectRating[1])} rating`;
+  const result = text.match(/^([^,]+), (\d+)\+$/);
+  if (result) return `${localizeText(result[1])}, ${result[2]}+`;
+  const reportHeading = text.match(/^Raportează (.+)$/);
+  if (reportHeading) return `Report ${reportHeading[1]}`;
+  const groupDetailsLabel = text.match(/^Deschide detaliile pentru (.+)$/);
+  if (groupDetailsLabel) return `Open ${groupDetailsLabel[1]} details`;
+  const profileLabel = text.match(/^Deschide profilul persoanei (.+)$/);
+  if (profileLabel) return `Open ${profileLabel[1]}'s profile`;
+  const moreActionsLabel = text.match(/^Mai multe acțiuni pentru (.+)$/);
+  if (moreActionsLabel) return `More actions for ${moreActionsLabel[1]}`;
+  const aiMessage = text.match(/^Căutăm local elevi care te pot ajuta la (.+)\.$/);
+  if (aiMessage) return `Searching locally for students who can help with ${localizeText(aiMessage[1])}.`;
+  const emptyAiResult = text.match(/^Am înțeles că ai nevoie de ajutor la (.+), dar nu am găsit niciun elev potrivit\.$/);
+  if (emptyAiResult) return `We understood that you need help with ${localizeText(emptyAiResult[1])}, but no matching student was found.`;
+  const sessionIntro = text.match(/^Începi cu (\d+) sesiuni\. Poți câștiga mai multe predând sau poți adăuga sesiuni cu unul dintre pachetele de mai jos\.$/);
+  if (sessionIntro) return `You start with ${sessionIntro[1]} sessions. You can earn more by teaching or add to your balance with a pack below.`;
+  const reportHeading = text.match(/^Raportează (.+)$/);
+  if (reportHeading) return `Report ${reportHeading[1]}`;
+  const english = Object.entries(ROMANIAN_TRANSLATIONS).find(([, romanian]) => romanian === text);
+  return english ? english[0] : text;
+}
+
+function localizeElement(root) {
+  if (!root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    const leading = node.nodeValue.match(/^\s*/)?.[0] || '';
+    const trailing = node.nodeValue.match(/\s*$/)?.[0] || '';
+    const original = node.nodeValue.trim();
+    if (original && !node.parentElement?.closest('[data-no-localize]')) {
+      const localized = localizeText(original);
+      if (localized !== original) node.nodeValue = `${leading}${localized}${trailing}`;
+    }
+    node = walker.nextNode();
+  }
+
+  const elements = root.nodeType === Node.ELEMENT_NODE ? [root, ...root.querySelectorAll('*')] : [];
+  for (const element of elements) {
+    for (const attribute of ['aria-label', 'aria-description', 'placeholder', 'title', 'alt']) {
+      const value = element.getAttribute(attribute);
+      if (value) element.setAttribute(attribute, localizeText(value));
+    }
+  }
+}
+
+document.documentElement.lang = currentLanguage;
+new MutationObserver((mutations) => {
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes) localizeElement(node);
+    if (mutation.type === 'characterData') localizeElement(mutation.target.parentElement);
+  }
+}).observe(document.body, { childList: true, subtree: true, characterData: true });
+
+function languageButtonMarkup(guest = false) {
+  return `<button class="language-toggle${guest ? ' language-toggle-guest' : ''}" type="button" data-language-toggle data-no-localize aria-label="Switch language" title="Switch language">${currentLanguage === 'en' ? 'Română' : 'English'}</button>`;
+}
 
 const state = {
   session: null,
@@ -223,7 +619,7 @@ function topSubject(profile) {
 function toast(message) {
   const el = document.querySelector('#toast');
   if (!el) return;
-  el.textContent = message;
+  el.textContent = localizeText(message);
   el.classList.add('show');
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => el.classList.remove('show'), 3000);
@@ -427,11 +823,14 @@ function shell(content) {
           <button class="${state.view === 'settings' ? 'active' : ''}" data-view="settings">Settings</button>
         </nav>
         <button class="credit sessions-trigger" type="button" data-sessions-open aria-haspopup="dialog" aria-label="View session balance and offers">✦ ${sessionBalance()} Sessions</button>
+        ${languageButtonMarkup()}
       </div>
     </header>
   ` : '';
 
-  document.querySelector('#app').innerHTML = `${nav}<main class="wrap">${content}</main><div id="toast" class="toast" role="status"></div>`;
+  document.querySelector('#app').innerHTML = `${nav}${state.profile ? '' : languageButtonMarkup(true)}<main class="wrap">${content}</main><div id="toast" class="toast" role="status"></div>`;
+  document.documentElement.lang = currentLanguage;
+  localizeElement(document.querySelector('#app'));
 
   document.querySelectorAll('[data-view]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -443,6 +842,14 @@ function shell(content) {
   });
 
   document.querySelector('[data-sessions-open]')?.addEventListener('click', openSessionsModal);
+  document.querySelectorAll('[data-language-toggle]').forEach((button) => {
+    button.addEventListener('click', () => {
+      currentLanguage = currentLanguage === 'en' ? 'ro' : 'en';
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
+      document.documentElement.lang = currentLanguage;
+      localizeElement(document.body);
+    });
+  });
 }
 
 function openSessionsModal() {
@@ -862,12 +1269,12 @@ function renderDiscover() {
             <div class="personhead">
               ${avatarMarkup(person)}
               <div class="personinfo">
-                <b>${escapeHtml(person.display_name)} ${trustBadge(person)}</b>
-                <small>${escapeHtml(levelName(person.school_level))} · ${escapeHtml(person.county)}</small>
+                <b><span data-no-localize>${escapeHtml(person.display_name)}</span> ${trustBadge(person)}</b>
+                <small><span>${escapeHtml(levelName(person.school_level))}</span> · <span data-no-localize>${escapeHtml(person.county)}</span></small>
               </div>
             </div>
 
-            ${person.bio ? `<p class="person-bio">${highlightSubject(person.bio, searchSubject)}</p>` : ''}
+            ${person.bio ? `<p class="person-bio" data-no-localize>${highlightSubject(person.bio, searchSubject)}</p>` : ''}
 
             <div class="subject-ratings">
               ${tags.length ? tags.map(({ subject, rating }) => `
@@ -1011,8 +1418,8 @@ function openProfileModal(personId) {
       <div class="threadtitle">
         ${avatarMarkup(person)}
         <div>
-          <b id="profile-title">${escapeHtml(person.display_name)} ${trustBadge(person)}</b>
-          <small>${escapeHtml(levelName(person.school_level))} · ${escapeHtml(person.county)}</small>
+          <b id="profile-title"><span data-no-localize>${escapeHtml(person.display_name)}</span> ${trustBadge(person)}</b>
+          <small><span>${escapeHtml(levelName(person.school_level))}</span> · <span data-no-localize>${escapeHtml(person.county)}</span></small>
         </div>
         <div class="profile-menu-wrap">
           <button class="profile-more" type="button" data-profile-more aria-expanded="false" aria-label="More actions for ${escapeHtml(person.display_name)}"><span aria-hidden="true">⋯</span></button>
@@ -1024,7 +1431,7 @@ function openProfileModal(personId) {
           </div>
         </div>
       </div>
-      <p>${escapeHtml(person.bio || 'No bio added yet.')}</p>
+      <p>${person.bio ? `<span data-no-localize>${escapeHtml(person.bio)}</span>` : 'No bio added yet.'}</p>
       ${person.owner ? '<span class="tag">Platform owner</span>' : person.verified ? '<span class="tag">Passport photo verified</span>' : '<span class="muted small">Passport photo pending verification</span>'}
       <h3>Subject ratings</h3>
       ${tags.length ? `<div class="subject-ratings">
@@ -1048,10 +1455,10 @@ function openProfileModal(personId) {
             return `
               <article class="review">
                 <div class="review-heading">
-                  <b>${escapeHtml(reviewer?.display_name || 'Student')}</b>
+                  <b><span data-no-localize>${escapeHtml(reviewer?.display_name || 'Student')}</span></b>
                   <span class="review-stars" aria-label="${review.rating} out of 5 stars">${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)}</span>
                 </div>
-                ${review.comment ? `<p>${escapeHtml(review.comment)}</p>` : ''}
+                ${review.comment ? `<p data-no-localize>${escapeHtml(review.comment)}</p>` : ''}
               </article>
             `;
           }).join('')}</div>` : '<p class="muted">No comments yet. Reviews appear after a completed session.</p>'}
@@ -1100,7 +1507,7 @@ function openProfileModal(personId) {
       state.blockedProfiles = state.blockedProfiles.filter((id) => id !== personId);
       saveLocalState();
       toast('Student unblocked.');
-    } else if (window.confirm('Block this student? You will not be able to send them messages.')) {
+    } else if (window.confirm(localizeText('Block this student? You will not be able to send them messages.'))) {
       blockProfile(personId);
     } else {
       return;
@@ -1258,7 +1665,9 @@ function renderInbox() {
             <button class="chatitem ${activeChat && activeChat.id === chat.id ? 'selected' : ''}" data-chat-id="${chat.id}">
               ${chat.isGroup ? groupAvatarMarkup(chat, 'small-avatar') : avatarMarkup(partner, 'small-avatar')}
               <span>
-                <b>${escapeHtml(chat.isGroup ? (chat.title || 'Study group') : (partner?.display_name || 'Student'))}</b>
+                <b>${chat.isGroup
+                  ? chat.title ? `<span data-no-localize>${escapeHtml(chat.title)}</span>` : 'Study group'
+                  : `<span data-no-localize>${escapeHtml(partner?.display_name || 'Student')}</span>`}</b>
               <small>${chat.isGroup ? `${chat.participants.length} members` : (isPersonActive(partnerId) ? 'Active now' : 'Offline')}${unreadCount(chat) ? ` · <strong class="chat-unread">${unreadCount(chat)} new</strong>` : ''}</small>
               </span>
             </button>
@@ -1403,8 +1812,8 @@ function renderThread(chat) {
   const partner = getPersonById(chat.participants.find((personId) => personId !== currentUserId));
   const groupMembers = chat.participants.filter((personId) => personId !== currentUserId).map((personId) => getPersonById(personId)?.display_name || 'Student');
   const threadHeader = chat.isGroup
-    ? `<button class="threadtitle group-thread-profile" type="button" data-group-info aria-label="Open ${escapeHtml(chat.title || 'Study group')} details">${groupAvatarMarkup(chat)}<span><b>${escapeHtml(chat.title || 'Study group')}</b><small>${chat.participants.length} members · ${escapeHtml(groupMembers.join(', '))}</small></span></button>`
-    : `<div class="threadtitle"><button class="thread-profile" type="button" data-thread-profile="${escapeHtml(partner?.id || '')}" aria-label="Open ${escapeHtml(partner?.display_name || 'Student')}'s profile">${avatarMarkup(partner)}<span><b>${escapeHtml(partner?.display_name || 'Student')}</b><small class="presence ${isPersonActive(partner?.id) ? 'online' : ''}">${isPersonActive(partner?.id) ? 'Active now' : 'Offline'}</small></span></button></div>`;
+    ? `<button class="threadtitle group-thread-profile" type="button" data-group-info aria-label="Open ${escapeHtml(chat.title || 'Study group')} details">${groupAvatarMarkup(chat)}<span><b>${chat.title ? `<span data-no-localize>${escapeHtml(chat.title)}</span>` : 'Study group'}</b><small>${chat.participants.length} members · <span data-no-localize>${escapeHtml(groupMembers.join(', '))}</span></small></span></button>`
+    : `<div class="threadtitle"><button class="thread-profile" type="button" data-thread-profile="${escapeHtml(partner?.id || '')}" aria-label="Open ${escapeHtml(partner?.display_name || 'Student')}'s profile">${avatarMarkup(partner)}<span><b><span data-no-localize>${escapeHtml(partner?.display_name || 'Student')}</span></b><small class="presence ${isPersonActive(partner?.id) ? 'online' : ''}">${isPersonActive(partner?.id) ? 'Active now' : 'Offline'}</small></span></button></div>`;
 
   let body = `
     ${threadHeader}
@@ -1419,9 +1828,9 @@ function renderThread(chat) {
         const receipt = mine ? (message.status === 'failed' ? '<span class="message-receipt failed">Failed to send</span>' : `<span class="message-receipt">${message.status === 'read' ? 'Read' : message.status === 'delivered' ? 'Delivered' : 'Sent'}</span>`) : '';
         return `
           <div class="bubble ${mine ? 'mine' : ''} ${message.status === 'failed' ? 'failed' : ''}" data-message-key="${escapeHtml(key)}">
-            ${message.replyToText ? `<div class="reply-quote">${escapeHtml(message.replyToText)}</div>` : ''}
-            <p>${messageMarkup(message.text)}</p>
-            <small>${mine ? 'You' : escapeHtml(chat.isGroup ? (getPersonById(message.sender)?.display_name || 'Student') : (partner?.display_name || 'Them'))}${message.edited ? ' · edited' : ''} ${receipt}</small>
+            ${message.replyToText ? `<div class="reply-quote" data-no-localize>${escapeHtml(message.replyToText)}</div>` : ''}
+            <p data-no-localize>${messageMarkup(message.text)}</p>
+            <small>${mine ? 'You' : `<span data-no-localize>${escapeHtml(chat.isGroup ? (getPersonById(message.sender)?.display_name || 'Student') : (partner?.display_name || 'Them'))}</span>`}${message.edited ? ' · edited' : ''} ${receipt}</small>
             <div class="message-actions">
               <button class="message-more" type="button" data-message-more aria-expanded="false" aria-label="Message actions">⋯</button>
               <div class="message-menu" hidden>
@@ -1449,7 +1858,7 @@ function renderThread(chat) {
 
   if (chat.status === 'active') {
     body += `
-      ${chat.editingMessageKey ? '<div class="reply-composer edit-composer"><span><b>Editing message</b><br />Make your changes, then press Save.</span><button type="button" data-cancel-edit aria-label="Cancel editing">×</button></div>' : chat.replyTo ? `<div class="reply-composer"><span><b>Replying to ${escapeHtml(chat.replyTo.senderName || 'student')}</b><br />${escapeHtml(chat.replyTo.text)}</span><button type="button" data-clear-reply aria-label="Cancel reply">×</button></div>` : ''}
+      ${chat.editingMessageKey ? '<div class="reply-composer edit-composer"><span><b>Editing message</b><br />Make your changes, then press Save.</span><button type="button" data-cancel-edit aria-label="Cancel editing">×</button></div>' : chat.replyTo ? `<div class="reply-composer"><span><b>Replying to</b> <span data-no-localize>${escapeHtml(chat.replyTo.senderName || 'student')}</span><br /><span data-no-localize>${escapeHtml(chat.replyTo.text)}</span></span><button type="button" data-clear-reply aria-label="Cancel reply">×</button></div>` : ''}
       <div class="sendform ${isBlocked(partner?.id) ? 'blocked-sendform' : ''}">
         <textarea id="messageInput" rows="1" placeholder="${chat.editingMessageKey ? 'Edit your message…' : 'Write a message…'}" aria-label="${chat.editingMessageKey ? 'Edit your message' : 'Write a message'}" autofocus></textarea>
         <button class="btn" data-send ${isBlocked(partner?.id) ? 'disabled' : ''}>${chat.editingMessageKey ? 'Save' : 'Send'}</button>
@@ -1457,7 +1866,7 @@ function renderThread(chat) {
       ${isBlocked(partner?.id) ? '<p class="send-error">You blocked this student. Messages will fail to send.</p>' : ''}
       ${chat.session && chat.session.date ? `
         <div class="notice">
-          <strong>${chat.session.completed ? 'Session completed:' : 'Session booked:'}</strong> ${escapeHtml(chat.session.date)} · ${escapeHtml(chat.session.method)}
+          <strong>${chat.session.completed ? 'Session completed:' : 'Session booked:'}</strong> ${escapeHtml(chat.session.date)} · <span>${escapeHtml(chat.session.method)}</span>
         </div>
         <div class="row">
           ${chat.session.completed
@@ -1497,7 +1906,7 @@ async function openGroupDetails(chat) {
   modal.innerHTML = `
     <section class="profile-panel card group-details-panel" role="dialog" aria-modal="true" aria-labelledby="group-details-title">
       <div class="sessions-heading">
-        <div><span class="eyebrow">Study group</span><h2 id="group-details-title">${escapeHtml(chat.title || 'Study group')}</h2></div>
+        <div><span class="eyebrow">Study group</span><h2 id="group-details-title">${chat.title ? `<span data-no-localize>${escapeHtml(chat.title)}</span>` : 'Study group'}</h2></div>
         <button class="modal-close" type="button" data-group-details-close aria-label="Close group details"><span aria-hidden="true">×</span></button>
       </div>
       ${isAdmin ? `
@@ -1512,7 +1921,7 @@ async function openGroupDetails(chat) {
         ${memberPeople.map((person, index) => {
           const personId = chat.participants[index];
           const memberIsAdmin = (chat.groupAdminIds || []).includes(personId) || personId === chat.createdBy;
-          return `<div class="group-detail-member">${avatarMarkup(person, 'small-avatar')}<span><b>${escapeHtml(person?.display_name || 'Student')}</b><small>${memberIsAdmin ? 'Admin' : 'Member'}${personId === chat.createdBy ? ' · Creator' : ''}</small></span>${isAdmin && personId !== currentUserId && !memberIsAdmin ? `<button class="btn secondary" type="button" data-make-admin="${escapeHtml(personId)}">Make admin</button>` : ''}</div>`;
+          return `<div class="group-detail-member">${avatarMarkup(person, 'small-avatar')}<span><b><span data-no-localize>${escapeHtml(person?.display_name || 'Student')}</span></b><small><span>${memberIsAdmin ? 'Admin' : 'Member'}</span>${personId === chat.createdBy ? ' · Creator' : ''}</small></span>${isAdmin && personId !== currentUserId && !memberIsAdmin ? `<button class="btn secondary" type="button" data-make-admin="${escapeHtml(personId)}">Make admin</button>` : ''}</div>`;
         }).join('')}
       </div>
     </section>
@@ -1666,7 +2075,7 @@ async function deleteMessage(chatId, key) {
   const chat = state.chats.find((entry) => entry.id === chatId);
   const index = findChatMessageIndex(chat, key);
   const message = index >= 0 ? chat.messages[index] : null;
-  if (!chat || !message || !canModifyMessage(message) || !window.confirm('Delete this message?')) return;
+  if (!chat || !message || !canModifyMessage(message) || !window.confirm(localizeText('Delete this message?'))) return;
   if (configured && supabase && state.session?.user && !String(chatId).startsWith('chat-') && message.id) {
     const { error } = await supabase.from('messages').delete().eq('id', message.id).eq('sender_id', state.profile.id);
     if (error) {
@@ -1743,9 +2152,9 @@ function bookSession(chatId) {
     toast('You need 1 session credit to book. Complete a teaching session to earn one.');
     return;
   }
-  const date = window.prompt('Choose a date and time (YYYY-MM-DD HH:mm)', '2026-11-02 18:30');
+  const date = window.prompt(localizeText('Choose a date and time (YYYY-MM-DD HH:mm)'), '2026-11-02 18:30');
   if (!date) return;
-  const method = window.prompt('Session type: online or in-person?', 'online');
+  const method = window.prompt(localizeText('Session type: online or in-person?'), 'online');
   const normalizedMethod = (method || 'online').toLowerCase().includes('in') ? 'in-person' : 'online';
   if (normalizedMethod === 'in-person' && !state.profile.verified && !state.profile.owner) {
     toast('In-person sessions require a verified passport photo. Choose online or verify your profile first.');
@@ -1982,7 +2391,7 @@ function openReportModal(partnerId, chatId = 'profile') {
   modal.className = 'report-modal';
   modal.innerHTML = `
     <div class="report-panel">
-      <h3>Report ${escapeHtml(partner?.display_name || 'this student')}</h3>
+      <h3><span>Report</span> <span>${partner ? `<span data-no-localize>${escapeHtml(partner.display_name)}</span>` : 'this student'}</span></h3>
       <p class="muted">This flags misconduct, no-shows, unsafe behavior, or inappropriate content.</p>
       <textarea id="reportReason" rows="5" placeholder="Describe what happened…"></textarea>
       <div class="row">
@@ -2083,7 +2492,7 @@ function renderSettings() {
         </label>
         <label>
           Bio
-          <textarea id="profile-bio" rows="3">${escapeHtml(state.profile.bio || '')}</textarea>
+          <textarea id="profile-bio" rows="3" data-no-localize>${escapeHtml(state.profile.bio || '')}</textarea>
         </label>
         <div class="notice">
           <strong>${state.profile.owner ? '♛ Platform owner' : state.profile.verified ? '✓ Passport photo verified' : 'Passport photo pending verification'}</strong>
