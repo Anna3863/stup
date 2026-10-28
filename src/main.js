@@ -294,6 +294,7 @@ const ROMANIAN_TRANSLATIONS = {
 function localizeText(value) {
   const text = String(value);
   if (currentLanguage === 'ro') {
+    if (ROMANIAN_TRANSLATIONS[text]) return ROMANIAN_TRANSLATIONS[text];
     const sessions = text.match(/^(✦ )?(\d+) Sessions$/);
     if (sessions) return `${sessions[1] || ''}${sessions[2]} ${Number(sessions[2]) === 1 ? 'Sesiune' : 'Sesiuni'}`;
     const members = text.match(/^(\d+) members$/);
