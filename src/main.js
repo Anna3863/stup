@@ -1,4 +1,6 @@
 ﻿import { supabase, configured } from './supabase.js';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import './style.css';
 import './profile-reviews.css';
 import './ora-search.css';
@@ -261,6 +263,26 @@ const ROMANIAN_TRANSLATIONS = {
   'Choose a date and time (YYYY-MM-DD HH:mm)': 'Alege data și ora (AAAA-LL-ZZ HH:mm)',
   'Session type: online or in-person?': 'Tipul sesiunii: online sau față în față?',
   'In-person sessions require a verified passport photo. Choose online or verify your profile first.': 'Sesiunile față în față necesită o fotografie de pașaport verificată. Alege sesiunea online sau verifică-ți profilul.',
+  'In-person meeting': 'Întâlnire față în față',
+  'Both people must be verified before sharing a meeting place.': 'Ambele persoane trebuie să fie verificate înainte de a partaja un loc de întâlnire.',
+  'Do not share your location — this person is not verified.': 'Nu îți partaja locația — această persoană nu este verificată.',
+  'Verify your profile before sharing a meeting place.': 'Verifică-ți profilul înainte de a partaja un loc de întâlnire.',
+  'Choose a meeting place': 'Alege un loc de întâlnire',
+  'Search places': 'Caută locuri',
+  'Search place names or addresses': 'Caută locuri sau adrese',
+  'Searching places…': 'Se caută locuri…',
+  'Choose a result, or click the map to place a pin.': 'Alege un rezultat sau fă clic pe hartă pentru a plasa un pin.',
+  'Map pin': 'Pin pe hartă',
+  'Search is sent to Photon, an OpenStreetMap-based service. Only the place you choose will be shared in this conversation.': 'Căutarea este trimisă către Photon, un serviciu bazat pe OpenStreetMap. Doar locul ales de tine va fi partajat în această conversație.',
+  'Select a point on the map or search for a place.': 'Selectează un punct pe hartă sau caută un loc.',
+  'No places found. Try a different search.': 'Nu am găsit locuri. Încearcă altă căutare.',
+  'Map search failed. Please try again.': 'Căutarea pe hartă a eșuat. Încearcă din nou.',
+  'Share meeting place': 'Partajează locul de întâlnire',
+  'Close map': 'Închide harta',
+  'Location sharing is only available in hosted conversations.': 'Partajarea locației este disponibilă doar în conversațiile găzduite.',
+  'This student has blocked you.': 'Acest elev te-a blocat.',
+  'Accept this conversation before sharing a location.': 'Acceptă această conversație înainte de a partaja o locație.',
+  'Choose a valid meeting place on the map.': 'Alege un loc de întâlnire valid pe hartă.',
   'Choose a valid date and time.': 'Alege o dată și o oră valide.',
   'Only the student who requested this session can rate it.': 'Doar elevul care a solicitat sesiunea o poate evalua.',
   'You have already rated this session.': 'Ai evaluat deja această sesiune.',
@@ -811,7 +833,7 @@ function isPersonActive(personId) {
 }
 
 function messageMarkup(text) {
-  return escapeHtml(text).replace(/(https:\/\/(?:[\w-]+\.)?zoom\.us\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  return escapeHtml(text).replace(/(https:\/\/(?:[\w-]+\.)?(?:zoom\.us|openstreetmap\.org)\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 
 function completedSessionCount(userId) {
@@ -1856,6 +1878,7 @@ function renderInbox() {
   const finishButton = document.querySelector('[data-finish]');
   const rateButton = document.querySelector('[data-rate-session]');
   const zoomButton = document.querySelector('[data-zoom]');
+  const meetingPlaceButton = document.querySelector('[data-meeting-place]');
 
   if (acceptButton) acceptButton.addEventListener('click', () => acceptChat(activeChat.id));
   if (declineButton) declineButton.addEventListener('click', () => declineChat(activeChat.id));
@@ -1863,6 +1886,7 @@ function renderInbox() {
   if (finishButton) finishButton.addEventListener('click', () => completeSession(activeChat.id));
   if (rateButton) rateButton.addEventListener('click', () => openReviewModal(activeChat.id));
   if (zoomButton) zoomButton.addEventListener('click', () => openZoomLink(activeChat.id));
+  if (meetingPlaceButton) meetingPlaceButton.addEventListener('click', () => openMeetingPlacePicker(activeChat.id));
   // Realtime delivery can be missed while a phone is backgrounded. Reload the
   // conversation once when Inbox opens so the recipient sees the persisted
   // Zoom URL even without a websocket event.
@@ -1872,10 +1896,13 @@ function renderInbox() {
 function renderThread(chat) {
   const currentUserId = state.profile.id;
   const partner = getPersonById(chat.participants.find((personId) => personId !== currentUserId));
+  const currentUserVerified = Boolean(state.profile.verified || state.profile.owner);
+  const partnerVerified = Boolean(partner?.verified || partner?.owner);
+  const meetingPlaceBlockReason = meetingPlaceAccessMessage(chat);
   const groupMembers = chat.participants.filter((personId) => personId !== currentUserId).map((personId) => getPersonById(personId)?.display_name || 'Student');
   const threadHeader = chat.isGroup
     ? `<button class="threadtitle group-thread-profile" type="button" data-group-info aria-label="Open ${escapeHtml(chat.title || 'Study group')} details">${groupAvatarMarkup(chat)}<span><b>${chat.title ? `<span data-no-localize>${escapeHtml(chat.title)}</span>` : 'Study group'}</b><small>${chat.participants.length} members · <span data-no-localize>${escapeHtml(groupMembers.join(', '))}</span></small></span></button>`
-    : `<div class="threadtitle"><button class="thread-profile" type="button" data-thread-profile="${escapeHtml(partner?.id || '')}" aria-label="Open ${escapeHtml(partner?.display_name || 'Student')}'s profile">${avatarMarkup(partner)}<span><b><span data-no-localize>${escapeHtml(partner?.display_name || 'Student')}</span></b><small class="presence ${isPersonActive(partner?.id) ? 'online' : ''}">${isPersonActive(partner?.id) ? 'Active now' : 'Offline'}</small></span></button></div>`;
+    : `<div class="threadtitle"><button class="thread-profile" type="button" data-thread-profile="${escapeHtml(partner?.id || '')}" aria-label="Open ${escapeHtml(partner?.display_name || 'Student')}'s profile">${avatarMarkup(partner)}<span><b><span data-no-localize>${escapeHtml(partner?.display_name || 'Student')}</span></b><small class="presence ${isPersonActive(partner?.id) ? 'online' : ''}">${isPersonActive(partner?.id) ? 'Active now' : 'Offline'}</small>${!partnerVerified ? '<small class="location-safety-warning">Do not share your location — this person is not verified.</small>' : !currentUserVerified ? '<small class="location-safety-warning">Verify your profile before sharing a meeting place.</small>' : ''}</span></button></div>`;
 
   let body = `
     ${threadHeader}
@@ -1943,6 +1970,7 @@ function renderThread(chat) {
       ${chat.zoomJoinUrl ? '<div class="notice"><strong>Zoom session ready</strong><p class="muted small">Use the button below to join the shared session.</p></div>' : ''}
       <div class="row">
         <button class="btn" type="button" data-zoom>Join Zoom session</button>
+        ${!chat.isGroup ? `<button class="btn secondary" type="button" data-meeting-place ${meetingPlaceBlockReason ? `disabled title="${escapeHtml(meetingPlaceBlockReason)}"` : ''}>In-person meeting</button>` : ''}
       </div>
     `;
   }
@@ -1952,6 +1980,218 @@ function renderThread(chat) {
   }
 
   return body;
+}
+
+function meetingPlaceAccessMessage(chat) {
+  if (!chat || chat.isGroup) return 'Both people must be verified before sharing a meeting place.';
+  if (!state.profile?.verified && !state.profile?.owner) return 'Verify your profile before sharing a meeting place.';
+  const partnerId = chat.participants.find((personId) => personId !== state.profile.id);
+  const partner = getPersonById(partnerId);
+  if (!partner?.verified && !partner?.owner) return 'Do not share your location — this person is not verified.';
+  if (chat.status !== 'active') return 'Accept this conversation before sharing a location.';
+  if (!configured || !supabase || !state.session?.user || String(chat.id).startsWith('chat-')) {
+    return 'Location sharing is only available in hosted conversations.';
+  }
+  return '';
+}
+
+function openMeetingPlacePicker(chatId) {
+  const chat = state.chats.find((entry) => entry.id === chatId);
+  const blockReason = meetingPlaceAccessMessage(chat);
+  if (blockReason) {
+    toast(blockReason);
+    return;
+  }
+  if (!configured || !supabase || !state.session?.user || String(chatId).startsWith('chat-')) {
+    toast('Location sharing is only available in hosted conversations.');
+    return;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'meeting-map-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'meeting-map-title');
+  modal.innerHTML = `
+    <section class="meeting-map-panel">
+      <header class="meeting-map-heading">
+        <h2 id="meeting-map-title">Choose a meeting place</h2>
+        <button class="modal-close" type="button" data-map-close aria-label="Close map"><span aria-hidden="true">×</span></button>
+      </header>
+      <form class="meeting-place-search" data-place-search>
+        <input type="search" name="query" placeholder="Search place names or addresses" aria-label="Search place names or addresses" required />
+        <button class="btn" type="submit" data-place-search-button>Search places</button>
+      </form>
+      <p class="meeting-map-privacy">Search is sent to Photon, an OpenStreetMap-based service. Only the place you choose will be shared in this conversation.</p>
+      <div class="meeting-place-results" data-place-results aria-live="polite"></div>
+      <div class="meeting-map" data-meeting-map role="application" aria-label="Map. Select a point to choose a meeting place."></div>
+      <p class="meeting-map-selection" data-place-selection role="status">Select a point on the map or search for a place.</p>
+      <footer class="meeting-map-actions">
+        <span class="meeting-map-attribution">© OpenStreetMap contributors</span>
+        <div class="row">
+          <button class="btn secondary" type="button" data-map-cancel>Cancel</button>
+          <button class="btn" type="button" data-place-share disabled>Share meeting place</button>
+        </div>
+      </footer>
+    </section>
+  `;
+  document.body.appendChild(modal);
+  localizeElement(modal);
+
+  const map = L.map(modal.querySelector('[data-meeting-map]'), { scrollWheelZoom: true })
+    .setView([44.4268, 26.1025], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
+  }).addTo(map);
+
+  let marker = null;
+  let selectedPlace = null;
+  const selection = modal.querySelector('[data-place-selection]');
+  const shareButton = modal.querySelector('[data-place-share]');
+  const resultList = modal.querySelector('[data-place-results]');
+  const setSelection = (latitude, longitude, label) => {
+    selectedPlace = { latitude, longitude, label };
+    if (marker) marker.remove();
+    marker = L.circleMarker([latitude, longitude], {
+      radius: 9,
+      color: '#fff',
+      weight: 3,
+      fillColor: '#d96a2d',
+      fillOpacity: 1
+    }).addTo(map);
+    selection.textContent = `${label} (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`;
+    shareButton.disabled = false;
+  };
+  map.on('click', (event) => {
+    setSelection(event.latlng.lat, event.latlng.lng, localizeText('Map pin'));
+  });
+
+  const close = () => {
+    map.remove();
+    modal.remove();
+  };
+  modal.querySelector('[data-map-close]').addEventListener('click', close);
+  modal.querySelector('[data-map-cancel]').addEventListener('click', close);
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) close();
+  });
+  modal.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') close();
+  });
+  modal.querySelector('[data-place-search]').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const query = String(new FormData(form).get('query') || '').trim();
+    if (!query) return;
+    const submitButton = modal.querySelector('[data-place-search-button]');
+    submitButton.disabled = true;
+    resultList.textContent = '';
+    selectedPlace = null;
+    if (marker) {
+      marker.remove();
+      marker = null;
+    }
+    shareButton.disabled = true;
+    selection.textContent = 'Searching places…';
+    try {
+      const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`);
+      if (!response.ok) throw new Error('Place search request failed.');
+      const result = await response.json();
+      const features = Array.isArray(result.features) ? result.features : [];
+      if (!features.length) {
+        selection.textContent = 'No places found. Try a different search.';
+        return;
+      }
+      selection.textContent = 'Choose a result, or click the map to place a pin.';
+      features.forEach((feature) => {
+        const [longitude, latitude] = feature.geometry?.coordinates || [];
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+        const properties = feature.properties || {};
+        const label = [...new Set([
+          properties.name,
+          properties.street,
+          properties.city || properties.locality,
+          properties.state,
+          properties.country
+        ].filter(Boolean))].join(', ') || 'Map pin';
+        const resultButton = document.createElement('button');
+        resultButton.className = 'meeting-place-result';
+        resultButton.type = 'button';
+        resultButton.textContent = label;
+        resultButton.addEventListener('click', () => {
+          setSelection(latitude, longitude, label);
+          map.flyTo([latitude, longitude], 16);
+        });
+        resultList.appendChild(resultButton);
+      });
+      if (!resultList.childElementCount) selection.textContent = 'No places found. Try a different search.';
+    } catch (error) {
+      console.error('Meeting place search failed:', error);
+      selection.textContent = 'Map search failed. Please try again.';
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+  shareButton.addEventListener('click', async () => {
+    if (!selectedPlace) return;
+    shareButton.disabled = true;
+    const shared = await sendMeetingPlace(chatId, selectedPlace);
+    if (shared) close();
+    else shareButton.disabled = false;
+  });
+
+  modal.querySelector('[name="query"]').focus();
+  requestAnimationFrame(() => map.invalidateSize());
+}
+
+async function sendMeetingPlace(chatId, place) {
+  const chat = state.chats.find((entry) => entry.id === chatId);
+  const blockReason = meetingPlaceAccessMessage(chat);
+  if (blockReason) {
+    toast(blockReason);
+    return false;
+  }
+  if (!configured || !supabase || !state.session?.user || String(chatId).startsWith('chat-')) {
+    toast('Location sharing is only available in hosted conversations.');
+    return false;
+  }
+  const partnerId = chat.participants.find((personId) => personId !== state.profile.id);
+  if (isBlocked(partnerId)) {
+    toast('This student has blocked you.');
+    return false;
+  }
+  const { latitude, longitude } = place;
+  const label = String(place.label || '').trim().slice(0, 200);
+  if (!label || !Number.isFinite(latitude) || !Number.isFinite(longitude)
+    || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    toast('Choose a valid meeting place on the map.');
+    return false;
+  }
+  const mapUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=17/${latitude}/${longitude}`;
+  const text = `📍 Meeting place: ${label}\n${mapUrl}`;
+  try {
+    const { data, error } = await supabase.from('messages')
+      .insert({ conversation_id: chatId, sender_id: state.profile.id, body: text })
+      .select('id,created_at')
+      .single();
+    if (error) throw error;
+    chat.messages.push({
+      id: data?.id || crypto.randomUUID(),
+      sender: state.profile.id,
+      text,
+      status: 'delivered',
+      createdAt: data?.created_at || new Date().toISOString(),
+      read: false
+    });
+    chat.lastUpdated = data?.created_at || Date.now();
+    saveLocalState();
+    renderInbox();
+    return true;
+  } catch (error) {
+    toast(error.message || 'Could not share the meeting place.');
+    return false;
+  }
 }
 
 async function openGroupDetails(chat) {
