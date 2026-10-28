@@ -833,7 +833,7 @@ function isPersonActive(personId) {
 }
 
 function messageMarkup(text) {
-  return escapeHtml(text).replace(/(https:\/\/(?:[\w-]+\.)?(?:zoom\.us|openstreetmap\.org)\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  return escapeHtml(text).replace(/(https:\/\/(?:[\w-]+\.)?(?:zoom\.us\/[^\s<]+|openstreetmap\.org\/[^\s<]+|google\.com\/maps\/[^\s<]+))/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 }
 
 function completedSessionCount(userId) {
@@ -1967,7 +1967,6 @@ function renderThread(chat) {
             : '<button class="btn" data-finish>Session complete</button>'}
         </div>
       ` : '<p class="muted meeting-note">Zoom or call to get a session; texting will not result in obtaining or using up one.</p>'}
-      ${chat.zoomJoinUrl ? '<div class="notice"><strong>Zoom session ready</strong><p class="muted small">Use the button below to join the shared session.</p></div>' : ''}
       <div class="row">
         <button class="btn" type="button" data-zoom>Join Zoom session</button>
         ${!chat.isGroup ? `<button class="btn secondary" type="button" data-meeting-place ${meetingPlaceBlockReason ? `disabled title="${escapeHtml(meetingPlaceBlockReason)}"` : ''}>In-person meeting</button>` : ''}
@@ -2168,7 +2167,7 @@ async function sendMeetingPlace(chatId, place) {
     toast('Choose a valid meeting place on the map.');
     return false;
   }
-  const mapUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=17/${latitude}/${longitude}`;
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
   const text = `📍 Meeting place: ${label}\n${mapUrl}`;
   try {
     const { data, error } = await supabase.from('messages')
