@@ -368,8 +368,6 @@ function localizeText(value) {
   if (emptyAiResult) return `We understood that you need help with ${localizeText(emptyAiResult[1])}, but no matching student was found.`;
   const sessionIntro = text.match(/^Începi cu (\d+) sesiuni\. Poți câștiga mai multe predând sau poți adăuga sesiuni cu unul dintre pachetele de mai jos\.$/);
   if (sessionIntro) return `You start with ${sessionIntro[1]} sessions. You can earn more by teaching or add to your balance with a pack below.`;
-  const reportHeading = text.match(/^Raportează (.+)$/);
-  if (reportHeading) return `Report ${reportHeading[1]}`;
   const english = Object.entries(ROMANIAN_TRANSLATIONS).find(([, romanian]) => romanian === text);
   return english ? english[0] : text;
 }
