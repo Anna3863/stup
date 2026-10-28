@@ -406,9 +406,53 @@ new MutationObserver((mutations) => {
   }
 }).observe(document.body, { childList: true, subtree: true, characterData: true });
 
-function languageButtonMarkup(guest = false) {
-  return `<button class="language-toggle${guest ? ' language-toggle-guest' : ''}" type="button" data-language-toggle data-no-localize aria-label="Switch language" title="Switch language">${currentLanguage === 'en' ? 'Română' : 'English'}</button>`;
+function languageFlagMarkup(code) {
+  return code === 'ro'
+    ? '<svg viewBox="0 0 60 40" aria-hidden="true"><rect width="20" height="40" fill="#002b7f"/><rect x="20" width="20" height="40" fill="#fcd116"/><rect x="40" width="20" height="40" fill="#ce1126"/></svg>'
+    : '<svg viewBox="0 0 60 40" aria-hidden="true"><rect width="60" height="40" fill="#012169"/><path d="M0 0l60 40M60 0L0 40" stroke="#fff" stroke-width="9"/><path d="M0 0l60 40M60 0L0 40" stroke="#c8102e" stroke-width="4"/><path d="M30 0v40M0 20h60" stroke="#fff" stroke-width="13"/><path d="M30 0v40M0 20h60" stroke="#c8102e" stroke-width="7"/></svg>';
 }
+
+function languageButtonMarkup(guest = false) {
+  const languages = [
+    { code: 'en', name: 'English' },
+    { code: 'ro', name: 'Română' }
+  ];
+  return `
+    <div class="language-picker${guest ? ' language-picker-guest' : ''}" data-language-picker data-no-localize>
+      <button class="language-toggle" type="button" data-language-toggle aria-label="Switch language" title="Switch language" aria-haspopup="menu" aria-expanded="false" aria-controls="language-menu">
+        <span data-language-flag>${languageFlagMarkup(currentLanguage)}</span>
+      </button>
+      <div class="language-menu" id="language-menu" data-language-menu role="menu" aria-label="Languages" hidden>
+        ${languages.map((language) => `
+          <button class="language-option${language.code === currentLanguage ? ' active' : ''}" type="button" role="menuitemradio" data-language-option="${language.code}" aria-checked="${language.code === currentLanguage}">
+            <span class="language-flag">${languageFlagMarkup(language.code)}</span>
+            <span>${language.name}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+document.addEventListener('click', (event) => {
+  const picker = event.target.closest('[data-language-picker]');
+  if (picker) return;
+  document.querySelectorAll('[data-language-picker]').forEach((item) => {
+    item.querySelector('[data-language-toggle]').setAttribute('aria-expanded', 'false');
+    item.querySelector('[data-language-menu]').hidden = true;
+  });
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  document.querySelectorAll('[data-language-picker]').forEach((picker) => {
+    const toggle = picker.querySelector('[data-language-toggle]');
+    if (toggle.getAttribute('aria-expanded') === 'true') {
+      toggle.setAttribute('aria-expanded', 'false');
+      picker.querySelector('[data-language-menu]').hidden = true;
+      toggle.focus();
+    }
+  });
+});
 
 const state = {
   session: null,
@@ -842,12 +886,31 @@ function shell(content) {
   });
 
   document.querySelector('[data-sessions-open]')?.addEventListener('click', openSessionsModal);
-  document.querySelectorAll('[data-language-toggle]').forEach((button) => {
-    button.addEventListener('click', () => {
-      currentLanguage = currentLanguage === 'en' ? 'ro' : 'en';
-      localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
-      document.documentElement.lang = currentLanguage;
-      localizeElement(document.body);
+  document.querySelectorAll('[data-language-picker]').forEach((picker) => {
+    const toggle = picker.querySelector('[data-language-toggle]');
+    const menu = picker.querySelector('[data-language-menu]');
+    toggle.addEventListener('click', () => {
+      const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', String(!isExpanded));
+      menu.hidden = isExpanded;
+    });
+    picker.querySelectorAll('[data-language-option]').forEach((option) => {
+      option.addEventListener('click', () => {
+        currentLanguage = option.dataset.languageOption;
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
+        document.documentElement.lang = currentLanguage;
+        localizeElement(document.body);
+        document.querySelectorAll('[data-language-picker]').forEach((item) => {
+          item.querySelector('[data-language-flag]').innerHTML = languageFlagMarkup(currentLanguage);
+          item.querySelectorAll('[data-language-option]').forEach((languageOption) => {
+            const isCurrent = languageOption.dataset.languageOption === currentLanguage;
+            languageOption.classList.toggle('active', isCurrent);
+            languageOption.setAttribute('aria-checked', String(isCurrent));
+          });
+          item.querySelector('[data-language-toggle]').setAttribute('aria-expanded', 'false');
+          item.querySelector('[data-language-menu]').hidden = true;
+        });
+      });
     });
   });
 }
